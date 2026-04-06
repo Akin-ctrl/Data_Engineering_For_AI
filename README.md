@@ -55,6 +55,20 @@ Start here:
 - `.env.example`
 - `docker-compose.yml`
 
+## Day 2 Lab Entry Point
+
+The second practical lab moves from a static CSV to a live public API:
+
+- Query ArXiv for cs.LG papers.
+- Paginate through the Atom feed with a simple persisted watermark.
+- Flatten repeated authors into a normalized child table.
+- Load raw, clean, and rejected records idempotently into PostgreSQL.
+
+Start here:
+
+- `day2/README.md`
+- `day2/day2_arxiv_api_to_postgres.py`
+
 
 
 ## How Learners Should Use This Repo

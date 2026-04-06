@@ -4,3 +4,7 @@ refernce.py
 
 # Generated Day 1 pipeline artifacts
 day1/output/*.csv
+
+# Generated Day 2 pipeline artifacts
+day2/output/*.csv
+day2/output/*.json
