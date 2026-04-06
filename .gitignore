@@ -1,0 +1,6 @@
+CODING_STANDARDS_COMMITMENT.md
+refernce.py
+.env
+
+# Generated Day 1 pipeline artifacts
+day1/output/*.csv
