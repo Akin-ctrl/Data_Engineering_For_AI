@@ -8,3 +8,8 @@ day1/output/*.csv
 # Generated Day 2 pipeline artifacts
 day2/output/*.csv
 day2/output/*.json
+
+# Accidental terminal dump artifacts
+ycopg
+t=os.getenv('PGHOST'),
+= cur.fetchall()
