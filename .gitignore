@@ -9,6 +9,14 @@ day1/output/*.csv
 day2/output/*.csv
 day2/output/*.json
 
+# Generated Day 3 benchmark artifacts
+day3/output/*.csv
+day3/output/*.parquet
+day3/output/*.json
+
+# Python bytecode caches
+__pycache__/
+
 # Accidental terminal dump artifacts
 ycopg
 t=os.getenv('PGHOST'),

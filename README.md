@@ -69,6 +69,20 @@ Start here:
 - `day2/README.md`
 - `day2/day2_arxiv_api_to_postgres.py`
 
+## Day 3 Lab Entry Point
+
+The third practical lab turns the clean PostgreSQL data into file formats that are easy to compare:
+
+- Query the Day 2 clean table from PostgreSQL.
+- Export the same data to CSV and Parquet.
+- Measure read speed with pandas and PyArrow.
+- Compare file sizes and produce an "aha" benchmark report.
+
+Start here:
+
+- `day3/README.md`
+- `day3/day3_postgres_to_csv_parquet_benchmark.py`
+
 
 
 ## How Learners Should Use This Repo
@@ -87,12 +101,6 @@ Correction/reference materials should:
 - Explain key design choices briefly.
 - Include basic validation logic where relevant.
 - Stay aligned with concepts taught in class.
-
-## Instructor Notes
-
-- Keep labs small enough to complete within session time.
-- Emphasize reasoning and tradeoffs, not only final code.
-- Use corrections as a learning checkpoint, not a shortcut.
 
 ## Next Step in the 10-Week Journey
 
