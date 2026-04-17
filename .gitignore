@@ -14,6 +14,10 @@ day3/output/*.csv
 day3/output/*.parquet
 day3/output/*.json
 
+# Generated Day 4 orchestration artifacts
+day4/output/*.json
+day4/output/*.flag
+
 # Python bytecode caches
 __pycache__/
 

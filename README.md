@@ -80,10 +80,23 @@ The third practical lab turns the clean PostgreSQL data into file formats that a
 
 Start here:
 
-- `day3/README.md`
-- `day3/day3_postgres_to_csv_parquet_benchmark.py`
+- [day3/README.md](day3/README.md)
+- [day3/day3_postgres_to_csv_parquet_benchmark.py](day3/day3_postgres_to_csv_parquet_benchmark.py)
 
+## Day 4 Lab Entry Point
 
+The fourth practical lab wraps the Day 2 and Day 3 code into one orchestrated workflow with retries:
+
+- Run the API extract first.
+- Load PostgreSQL second.
+- Provision the Day 3 query views.
+- Generate the CSV and Parquet benchmark outputs last.
+- Inject a controlled failure and watch the retry behavior recover.
+
+Start here:
+
+- [day4/README.md](day4/README.md)
+- [day4/day4_orchestrated_workflow.py](day4/day4_orchestrated_workflow.py)
 
 ## How Learners Should Use This Repo
 

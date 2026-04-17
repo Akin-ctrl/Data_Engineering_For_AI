@@ -23,6 +23,7 @@ This lab is designed to make the storage tradeoff obvious:
 
 - `day3_postgres_to_csv_parquet_benchmark.py`: the Day 3 pipeline script.
 - `DAY3_CODE_WALKTHROUGH.md`: beginner-friendly explanation of the script.
+- `day3_agent_query_views.sql`: SQL views and materialized views for agent-style querying.
 - `output/`: deterministic CSV, Parquet, and JSON benchmark artifacts.
 
 ## Required Setup
@@ -73,5 +74,34 @@ DAY3_BENCHMARK_RUNS=10
 - The JSON benchmark report in `day3/output/`.
 - The size gap between the CSV and Parquet files.
 - The read-time difference between pandas and PyArrow on both formats.
+
+## Agent Query Views
+
+If you want an AI agent to answer user questions with fast SQL, create the Day 3 views:
+
+```bash
+eval "$(grep -E '^(PGHOST|PGPORT|PGDATABASE|PGUSER|PGPASSWORD)=' .env | sed 's/^/export /')"
+psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f day3/day3_agent_query_views.sql
+```
+
+After each new ingestion batch, refresh the materialized views:
+
+```sql
+REFRESH MATERIALIZED VIEW training_data.mv_agent_keyword_frequency;
+REFRESH MATERIALIZED VIEW training_data.mv_agent_category_cooccurrence;
+```
+
+Recommended agent-first tables/views:
+
+- `training_data.v_agent_papers`
+- `training_data.v_agent_category_counts`
+- `training_data.v_agent_monthly_category_counts`
+- `training_data.v_agent_author_frequency`
+- `training_data.v_agent_author_category_frequency`
+- `training_data.v_agent_metadata_quality`
+- `training_data.v_agent_pipeline_health`
+- `training_data.v_agent_recent_papers`
+- `training_data.mv_agent_keyword_frequency`
+- `training_data.mv_agent_category_cooccurrence`
 
 
