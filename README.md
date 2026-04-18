@@ -27,7 +27,6 @@ By the end of this module, learners should be able to:
 - Identify and fix common data quality issues.
 - Produce clean, structured, reusable datasets for downstream AI tasks.
 
-
 ## Repository Purpose
 
 This repository hosts lab work so learners can:
@@ -97,6 +96,21 @@ Start here:
 
 - [day4/README.md](day4/README.md)
 - [day4/day4_orchestrated_workflow.py](day4/day4_orchestrated_workflow.py)
+
+## Day 5 Lab Entry Point
+
+The fifth practical lab transforms the cleaned text corpus into instruction-tuning payloads:
+
+- Read clean paper text from PostgreSQL.
+- Chunk with sentence-based windows and overlap.
+- Generate strict instruction/input/output pairs.
+- Export deterministic train/validation payload files in Alpaca and chat formats.
+- Write a manifest with run and validation metadata.
+
+Start here:
+
+- [day5/README.md](day5/README.md)
+- [day5/day5_build_instruction_payload.py](day5/day5_build_instruction_payload.py)
 
 ## How Learners Should Use This Repo
 

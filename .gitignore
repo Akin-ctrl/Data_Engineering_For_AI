@@ -18,6 +18,10 @@ day3/output/*.json
 day4/output/*.json
 day4/output/*.flag
 
+# Generated Day 5 payload artifacts
+day5/output/*.json
+day5/output/*.jsonl
+
 # Python bytecode caches
 __pycache__/
 
