@@ -37,6 +37,12 @@ This repository hosts lab work so learners can:
 
 Use this repo as a practical companion to the live sessions, not as a replacement for active lab work.
 
+## Local Setup
+
+If you are preparing a Windows machine with Ubuntu in WSL2, start here before running any Docker-based labs:
+
+- [WSL Docker and Portainer setup](WSL_Docker_Portainer_Setup.md)
+
 ## Day 1 Lab Entry Point
 
 The first practical lab is ready and focused on the foundational data engineering flow:
