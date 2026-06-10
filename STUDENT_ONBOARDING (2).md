@@ -314,6 +314,32 @@ DAY3_ORDER_BY=paper_key
 DAY3_OUTPUT_DIR=day3/output
 DAY3_EXPORT_BASENAME=day3_clean_papers_benchmark
 DAY3_BENCHMARK_RUNS=10
+
+# ── Day 4: Orchestrated workflow settings ──────────────────────────────────
+DAY4_OUTPUT_DIR=day4/output
+DAY4_WORKFLOW_RETRIES=2
+DAY4_WORKFLOW_RETRY_DELAY_SECONDS=10
+DAY4_TASK_RETRIES=2
+DAY4_TASK_RETRY_DELAY_SECONDS=5
+DAY4_SABOTAGE_TARGET=off
+DAY4_SABOTAGE_MODE=once
+DAY4_SCHEDULE_ENABLED=false
+DAY4_SCHEDULE_EVERY_HOURS=24
+DAY4_SCHEDULE_EVERY_DAYS=0
+DAY4_SCHEDULE_NAME=day4-orchestrated-every-24h
+
+# ── Day 5: Instruction payload settings ────────────────────────────────────
+DAY5_SOURCE_TABLE=training_data.clean_papers
+DAY5_ORDER_BY=paper_key
+DAY5_OUTPUT_DIR=day5/output
+DAY5_EXPORT_BASENAME=day5_instruction_payload
+DAY5_MAX_CHUNK_WORDS=350
+DAY5_CHUNK_OVERLAP_WORDS=50
+DAY5_MIN_INPUT_WORDS=30
+DAY5_MIN_OUTPUT_WORDS=3
+DAY5_TRAIN_RATIO=0.9
+DAY5_SPLIT_SEED=42
+DAY5_MAX_PAPERS=0
 ```
 
 > [!WARNING]
@@ -412,6 +438,12 @@ python day2/day2_arxiv_api_to_postgres.py
 
 # Day 3 — Export clean data to CSV and Parquet, run benchmark
 python day3/day3_postgres_to_csv_parquet_benchmark.py
+
+# Day 4 — Orchestrate Day 2 and Day 3 with retries
+python day4/day4_orchestrated_workflow.py
+
+# Day 5 — Build instruction-tuning JSONL payloads
+python day5/day5_build_instruction_payload.py
 ```
 
 > [!NOTE]
