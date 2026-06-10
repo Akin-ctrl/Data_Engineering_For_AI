@@ -25,7 +25,5 @@ day5/output/*.jsonl
 # Python bytecode caches
 __pycache__/
 
-# Accidental terminal dump artifacts
-ycopg
-t=os.getenv('PGHOST'),
-= cur.fetchall()
+# Local Python virtual environments
+.venv/
