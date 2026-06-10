@@ -1,454 +1,191 @@
-# Day 1 Code Walkthrough (Beginner Friendly)
+# Day 1 Code Walkthrough
 
-## Why this document exists
+Day 1 has been refactored so the first file you open in class is small and readable.
 
-This guide explains the Day 1 script in plain language so students can:
+Start here:
 
-- Understand what every section is doing.
-- Understand why each section exists in a production-minded pipeline.
-- Read the script confidently without guessing.
+- `day1/lesson.py`
 
-Script explained in this guide:
+Use the files inside `day1/pipeline/` only when you want to explain one specific implementation detail.
 
-- day1/day1_hf_csv_to_postgres.py
+## Big Picture
 
-## Big picture: what the script does
+Day 1 teaches one complete data engineering pattern:
 
-The script runs a full one-shot data pipeline:
+```text
+CSV source -> read with pandas -> clean/reject split -> PostgreSQL -> quality checks
+```
 
-1. Read configuration from environment variables.
-2. Resolve and download a CSV dataset from Hugging Face.
-3. Load CSV into pandas safely.
-4. Clean and validate data defensively.
-5. Split rows into clean rows and rejected rows.
-6. Upsert raw rows, clean rows, and rejected rows into PostgreSQL.
-7. Export a sample rejected CSV for quick review.
-8. Run post-load quality checks and log results.
+The important learning idea is:
 
-## Execution flow in simple words
+> Clean data and rejected data should both be stored deliberately.
 
-When you run the file directly, Python starts at the bottom:
+Bad rows should not silently disappear, and they should not pollute the clean table.
 
-- If script is executed as main program, it calls run_pipeline().
-- If any exception happens, it logs a structured error and re-raises.
+## The Teaching Entry Point
 
-This means failures are visible and not silently swallowed.
+`day1/lesson.py` is the classroom entrypoint.
 
-## 1) Module header and imports
+The main function is intentionally short:
 
-What this block does:
+```text
+load config
+download CSV
+read CSV
+prepare raw rows
+clean and reject rows
+create tables
+load raw, clean, and rejected rows
+export rejected sample
+run checks
+```
 
-- Declares script purpose with a module docstring.
-- Imports all libraries needed for hashing, JSON logging, environment loading, HTTP downloads, pandas transforms, and SQL operations.
+That is the whole Day 1 story.
 
-Why it matters:
+## File Map
 
-- Imports reveal dependencies and responsibilities.
-- Keeping imports explicit helps students map features to libraries.
+| File | What It Explains |
+|---|---|
+| `day1/lesson.py` | The complete pipeline flow in readable order. |
+| `day1/day1_hf_csv_to_postgres.py` | Compatibility wrapper so the original run command still works. |
+| `day1/pipeline/config.py` | Environment variables and typed runtime config. |
+| `day1/pipeline/logging_utils.py` | JSON logging setup. |
+| `day1/pipeline/extract.py` | Hugging Face URL resolution, download, and CSV reading. |
+| `day1/pipeline/transform.py` | Column cleanup, row hashing, validation, and rejected-row logic. |
+| `day1/pipeline/load.py` | PostgreSQL schema creation and upserts. |
+| `day1/pipeline/outputs.py` | Rejected sample CSV export. |
+| `day1/pipeline/checks.py` | Post-load quality checks. |
 
-Notable imports and why:
+## Walkthrough Order For Class
 
-- hashlib: deterministic row hashing for deduplication and idempotency.
-- json: structured payload and log serialization.
-- logging: production-grade runtime observability.
-- re: column normalization and URL parsing.
-- dataclass: typed config object.
-- uuid4: unique batch identifier per run.
-- pandas: in-memory data processing.
-- requests: downloading dataset and calling Hugging Face API.
-- dotenv: reading local .env settings.
-- sqlalchemy: DB connection and SQL execution with parameters.
+### 1. Open `day1/lesson.py`
 
-## 2) Global constants
+Show learners that a pipeline is an ordered story:
 
-Constants defined:
+```text
+extract -> transform -> load -> check
+```
 
-- SCHEMA_NAME = de_ai
-- RAW_TABLE = raw_reviews
-- CLEAN_TABLE = clean_reviews
-- REJECT_TABLE = rejected_reviews
+Do not open the helper modules yet.
 
-Expected input schema:
+### 2. Explain Configuration
 
-- EXPECTED_COLUMNS list defines exact normalized columns required by this dataset.
+Open `day1/pipeline/config.py`.
 
-Why this is important:
+Students only need to understand:
 
-- Centralized constants avoid hard-coded strings all over the script.
-- Expected columns make schema drift fail fast, which is safer than silently corrupting data.
+- values come from `.env`
+- required values are checked early
+- the database connection string is built from config
 
-## 3) JsonFormatter class
+The teaching point:
 
-What it does:
+> Runtime settings should not be hard-coded inside pipeline logic.
 
-- Formats every log entry as a JSON object.
-- Adds timestamp, severity, message, module, function, and line number.
-- Optionally appends extra context if provided.
+### 3. Explain Extraction
 
-Why this is production-friendly:
+Open `day1/pipeline/extract.py`.
 
-- JSON logs are easy to search, filter, and aggregate.
-- Context field supports structured troubleshooting.
+Students only need to understand:
 
-Critical detail:
+- the Hugging Face URL is resolved
+- the CSV is downloaded into `day1/output/`
+- pandas reads the file defensively
 
-- json.dumps(..., default=str) prevents crashes when log context includes non-JSON-native values (example: Decimal).
+The teaching point:
 
-## 4) configure_logger function and LOGGER singleton
+> Extract code gets data into memory; it should not clean or load it.
 
-What it does:
+### 4. Explain Transformation
 
-- Creates logger named day1_pipeline.
-- Sets level to INFO.
-- Attaches one stream handler with JsonFormatter.
-- Returns logger object.
+Open `day1/pipeline/transform.py`.
 
-Why this pattern:
+Focus on:
 
-- Prevents duplicate handlers when script imports happen repeatedly.
-- Keeps logging behavior consistent everywhere in script.
+- `normalize_column_name`
+- `stable_row_hash`
+- `prepare_raw_records_for_load`
+- `clean_dataset_defensively`
 
-## 5) PipelineConfig dataclass
+The teaching point:
 
-What it does:
+> Transformation is where we decide what is acceptable, what is rejected, and why.
 
-- Stores all required runtime inputs from .env:
-  - hf_csv_url
-  - pghost
-  - pgport
-  - pgdatabase
-  - pguser
-  - pgpassword
-- Provides computed property sqlalchemy_url.
+### 5. Explain Loading
 
-Why dataclass is used:
+Open `day1/pipeline/load.py`.
 
-- Cleaner, typed, immutable config object.
-- Better readability than passing around many loose variables.
+Do not explain every SQL column line-by-line.
 
-## 6) load_config function
+Focus on the three destinations:
 
-What it does:
+- raw table
+- clean table
+- rejected table
 
-- Calls load_dotenv() so .env values become available in process.
-- Enforces required variable presence.
-- Raises clear ValueError if any are missing.
-- Returns PipelineConfig.
+The teaching point:
 
-Why this is defensive:
+> A good pipeline preserves traceability: original rows, accepted rows, and rejected rows.
 
-- Fails early before expensive work starts.
-- Gives clear setup feedback to students.
+### 6. Explain Checks
 
-## 7) normalize_column_name function
+Open `day1/pipeline/checks.py`.
 
-What it does:
+Focus on:
 
-- Lowercases names.
-- Replaces non-alphanumeric chars with underscore.
-- Collapses repeated underscores.
-- Trims leading and trailing underscores.
+- row counts
+- null checks
+- duplicate checks
+- rating distribution sample
 
-Example:
+The teaching point:
 
-- Positive Feedback Count becomes positive_feedback_count.
+> A pipeline is not finished when it writes data. It is finished when it proves the write worked.
 
-Why this matters:
+## What To Skip On First Pass
 
-- CSV headers often contain spaces and punctuation.
-- Normalized headers make downstream code stable and predictable.
+Skip these until learners ask:
 
-## 8) stable_row_hash function
+- detailed SQL DDL
+- logger internals
+- exact JSON log shape
+- every field in `PipelineConfig`
+- every branch in the reject logic
 
-What it does:
+Those details matter, but they are second-pass material.
 
-- Converts each row to a normalized dictionary.
-- Replaces missing values with empty strings.
-- Sorts keys before JSON serialization.
-- Hashes serialized content with SHA-256.
+## Common Student Questions
 
-Why this matters:
+### Why keep raw rows?
 
-- Same logical row always gets same hash.
-- Enables idempotent upserts and traceability across runs.
+Because clean data alone cannot explain what happened. Raw rows let us audit, replay, and debug.
 
-## 9) find_first_existing_column function
+### Why keep rejected rows?
 
-Current status:
+Because rejected rows are evidence. They tell us whether the source data is broken, the validation rules are too strict, or the pipeline needs improvement.
 
-- Helper that finds first matching column from candidate names.
-- Not used in current dataset-specific version.
+### Why use row hashes?
 
-Why keep it:
+Hashes give us stable row identities. That helps with deduplication and repeatable loads.
 
-- Useful utility for future labs with varied schemas.
-- Good teaching example of reusable helper functions.
+### Why use upserts?
 
-## 10) Hugging Face URL helpers
+Upserts let the script run more than once without blindly duplicating data.
 
-Functions:
+### Why split the code into modules?
 
-- parse_hf_dataset_id
-- resolve_huggingface_csv_url
+Because each module now has one teaching responsibility:
 
-What they do:
+```text
+config, extract, transform, load, output, check
+```
 
-- Accept either dataset page URL or direct CSV resolve URL.
-- If resolve URL already provided, return it.
-- Else parse dataset id from page URL.
-- Call Hugging Face dataset API.
-- Find CSV filename in repository siblings.
-- Build a direct CSV download URL.
+That makes the repo easier to explain and easier to debug.
 
-Why this is useful for students:
+## Instructor Script
 
-- Reduces setup friction.
-- Makes script robust against different user input styles.
+Use this short explanation:
 
-## 11) download_csv function
+> Day 1 takes a public CSV and treats it like production data. We do not trust it blindly. We download it, read it carefully, preserve the raw version, validate each row, send good rows to a clean table, send bad rows to a rejected table, and then run checks to prove the load worked.
 
-What it does:
-
-- Creates destination directory if needed.
-- Downloads bytes from URL with timeout.
-- Raises on HTTP failure.
-- Saves file locally and returns path.
-
-Why this is defensive:
-
-- Timeout prevents hanging forever.
-- raise_for_status surfaces bad URLs or network errors immediately.
-
-## 12) read_csv_defensively function
-
-What it does:
-
-- Reads CSV as strings first.
-- Treats common null tokens as missing values.
-- Skips malformed rows instead of crashing whole run.
-
-Why this approach:
-
-- Day 1 teaches resilience first.
-- Type coercion is done later in controlled validation logic.
-
-## 13) ensure_schema_and_tables function
-
-What it does:
-
-- Creates schema de_ai if missing.
-- Creates three tables if missing:
-  - raw_reviews
-  - clean_reviews
-  - rejected_reviews
-
-Design rationale:
-
-- raw_reviews stores traceable source records and metadata.
-- clean_reviews stores validated, analytics-ready fields.
-- rejected_reviews stores invalid records and reasons.
-
-Key constraints:
-
-- row_hash unique in raw and rejected for idempotent conflict handling.
-- review_key primary key in clean for upsert conflict target.
-
-## 14) clean_dataset_defensively function
-
-This is the most important teaching function.
-
-Step-by-step:
-
-1. Copy input dataframe and normalize column names.
-2. Add row_number and deterministic row_hash.
-3. Enforce expected schema presence.
-4. Coerce numeric columns:
-   - review_id from unnamed_0
-   - clothing_id
-   - age
-   - rating
-   - recommended_ind
-   - positive_feedback_count
-5. Trim text columns.
-6. Build review_key:
-   - Use review_id when available.
-   - Fallback to row_hash if review_id missing.
-7. Validate each row and collect rejection reasons:
-   - missing or invalid clothing_id
-   - missing or invalid rating
-   - rating out of 1..5 range
-   - missing or invalid recommended_ind
-   - recommended_ind not binary 0 or 1
-   - missing or invalid positive_feedback_count
-   - negative positive_feedback_count
-   - missing review_text
-   - age outside 13..100 (if present)
-8. Join row reasons into reject_reason string.
-9. Build raw_payload safely:
-   - normalize payload columns
-   - convert NaN to None to keep JSON valid
-10. Split into clean and rejected dataframes.
-11. Return only the selected output columns for each set.
-
-Why this is excellent for Day 1:
-
-- Shows practical quality gates.
-- Demonstrates how to keep bad data without losing it.
-- Introduces observability and auditability concepts early.
-
-## 15) upsert_raw_records function
-
-What it does:
-
-- Converts each normalized raw row into parameter payload.
-- Inserts into raw_reviews.
-- On row_hash conflict, updates existing row.
-
-Why this matters:
-
-- Supports reruns without duplicate explosion.
-- Preserves latest ingestion metadata.
-
-## 16) upsert_clean_records function
-
-What it does:
-
-- Converts clean dataframe into typed DB parameters.
-- Normalizes nullable text fields to None.
-- Inserts into clean_reviews.
-- On review_key conflict, updates all mutable fields.
-
-Why this is important:
-
-- Demonstrates robust upsert logic for structured curated data.
-- Keeps data current across reruns.
-
-## 17) upsert_rejected_records function
-
-What it does:
-
-- Writes rejected records with reason and raw_payload.
-- Upserts on row_hash conflict.
-
-Why this matters:
-
-- Rejections are not lost.
-- Learners can inspect failures and improve rules.
-
-## 18) export_rejected_csv_sample function
-
-What it does:
-
-- Writes top 100 rejected rows to output CSV.
-- Serializes raw_payload as JSON string for readability.
-
-Why this helps classwork:
-
-- Fast manual inspection without querying DB.
-- Easy to discuss common error patterns in class.
-
-## 19) run_post_load_checks function
-
-What it checks:
-
-- raw_count for this batch.
-- clean_count for this batch.
-- reject_count for this batch.
-- clean_null_violations in critical fields.
-- duplicate review keys in clean table.
-- sample rating distribution.
-
-Why this is key:
-
-- Confirms pipeline correctness immediately.
-- Gives measurable evidence after each run.
-
-## 20) run_pipeline function (orchestration)
-
-This is the central workflow controller.
-
-Execution order:
-
-1. Load config.
-2. Create unique batch_id.
-3. Prepare output paths.
-4. Log start event.
-5. Resolve source URL and download CSV.
-6. Read CSV into pandas dataframe.
-7. Fail if dataframe is empty.
-8. Create database engine.
-9. Ensure schema/tables exist.
-10. Build normalized raw dataframe with row_number and row_hash.
-11. Upsert raw records.
-12. Clean and split into clean/rejected.
-13. Upsert clean records.
-14. Upsert rejected records.
-15. Export rejected CSV sample.
-16. Run post-load checks.
-17. Log successful completion with row counts.
-
-Why this style is good teaching design:
-
-- Sequence is explicit and easy to narrate.
-- Each step is delegated to a focused helper function.
-- Students can test one stage at a time.
-
-## 21) Entry point and exception handling
-
-The final block:
-
-- Calls run_pipeline inside try.
-- On exception, logs structured error with type and message.
-- Re-raises to preserve non-zero exit code.
-
-Why this is best practice:
-
-- You get clear logs.
-- Your shell and schedulers still detect failure.
-
-## How to explain this script to beginners in class
-
-Use this 5-part narrative:
-
-1. Configuration: Where does the script get settings?
-2. Ingestion: How does data arrive locally?
-3. Validation: How do we decide what is good vs bad?
-4. Persistence: Where do raw, clean, and rejected records go?
-5. Verification: How do we know the run succeeded correctly?
-
-## Common student questions and answers
-
-Q: Why keep both raw and clean tables?
-
-A: Raw is audit trail and recovery source. Clean is trusted working data.
-
-Q: Why reject rows instead of auto-fixing everything?
-
-A: Silent auto-fixes can hide bad assumptions. Rejecting with reasons is safer.
-
-Q: Why upsert instead of insert only?
-
-A: Upsert allows safe reruns and idempotent behavior.
-
-Q: Why hash rows?
-
-A: Hashes give stable identity when natural IDs are missing or dirty.
-
-Q: Why JSON logs?
-
-A: Structured logs are easier to parse in production tooling.
-
-## Suggested Day 1 teaching exercise
-
-Ask students to modify one rule safely:
-
-- Example: Add rule that review_text must be at least 15 characters.
-
-Then ask them to:
-
-1. Implement rule.
-2. Rerun pipeline.
-3. Compare clean and rejected counts.
-4. Inspect rejected sample file and explain impact.
-
-This reinforces defensive engineering and measurable data quality outcomes.
+That is the Day 1 lesson.

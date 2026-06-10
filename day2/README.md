@@ -23,7 +23,9 @@ What makes this lab different from Day 1:
 
 ## Files
 
-- `day2_arxiv_api_to_postgres.py`: one-shot Day 2 pipeline script.
+- `lesson.py`: small teaching-first pipeline entrypoint.
+- `pipeline/`: focused modules for config, extraction, parsing, transform, load, state, checks, and outputs.
+- `day2_arxiv_api_to_postgres.py`: compatibility entrypoint for the original run command.
 - `DAY2_CODE_WALKTHROUGH.md`: beginner-friendly explanation of the script.
 - `output/`: rejected sample output and any teaching artifacts created by the pipeline.
 
@@ -52,6 +54,12 @@ pip install -r requirements.txt
 
 ```bash
 python day2/day2_arxiv_api_to_postgres.py
+```
+
+For teaching, open the smaller entrypoint first:
+
+```bash
+python day2/lesson.py
 ```
 
 ## Target Database Objects

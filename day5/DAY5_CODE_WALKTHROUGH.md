@@ -1,263 +1,221 @@
 # Day 5 Code Walkthrough
 
-This walkthrough explains how Day 5 converts the clean text corpus from earlier labs into strict instruction-tuning payloads ready for model training.
+Day 5 has been refactored so the first file you open in class is small and readable.
 
-## 0. Imports and Libraries
+Start here:
 
-The Day 5 script uses these imports and each one has a specific role:
+- `day5/lesson.py`
 
-- `hashlib`: creates deterministic IDs from chunk content.
-- `json`: serializes JSONL payload rows and manifest output.
-- `logging`: writes structured runtime logs.
-- `os`: reads environment variables.
-- `random`: performs deterministic train/validation splitting with a fixed seed.
-- `re`: validates SQL identifiers and performs sentence splitting.
-- `dataclasses.dataclass`: defines typed configuration and record containers.
-- `datetime`, `timezone`: timestamps logs and manifest metadata.
-- `pathlib.Path`: handles output paths cleanly.
-- `statistics.mean`: computes summary metrics used in validation logs.
-- `typing.Any`: keeps metadata payload typing explicit.
-- `pandas`: reads SQL results into a DataFrame.
-- `dotenv.load_dotenv`: loads `.env` variables.
-- `sqlalchemy.create_engine`, `sqlalchemy.text`: connects to PostgreSQL and runs the source query.
+Use the files inside `day5/pipeline/` only when you want to explain one specific implementation detail.
 
-The architecture mirrors previous days: typed config, structured logs, and explicit helper functions.
+## Big Picture
 
-## 1. Why Day 5 Exists
+Day 5 teaches how clean text becomes model-ready instruction payloads.
 
-Days 1 to 4 produce clean and queryable data assets. Day 5 adds the final training-data transformation layer: converting text rows into supervised instruction pairs for fine-tuning.
+```text
+Clean papers -> sentence chunks -> instruction records -> validation -> train/validation JSONL
+```
 
-## 2. Constants and Defaults
+The important learning idea is:
 
-The script defines all key defaults in one place:
+> AI training data still needs data engineering: structure, validation, deterministic splits, and manifests.
 
-- source table and ordering defaults
-- output directory and file basename
-- chunk size and overlap
-- validation minimums
-- split ratio and split seed
+## What Changes From Earlier Days
 
-This keeps behavior predictable and makes classroom tuning easy via `.env` values.
+Days 1 to 4 produced clean, queryable data assets.
 
-## 3. Logger Setup
+Day 5 turns those assets into supervised examples:
 
-`JsonFormatter` and `configure_logger()` are reused patterns from earlier days:
+- read clean paper text
+- split text into chunks
+- generate instruction/input/output records
+- generate chat-style records
+- validate payload shape and length
+- split records into train and validation sets
+- write JSONL files and a manifest
 
-- Every log line is JSON.
-- Context fields are optional and structured.
-- Logs are beginner-readable but production-shaped.
+The pipeline shape is:
 
-## 4. Day5Config Dataclass
+```text
+configure -> read source -> chunk text -> build tasks -> validate -> split -> export
+```
 
-`Day5Config` contains all runtime values and all output-path properties.
+## File Map
 
-Important properties:
+| File | What It Explains |
+|---|---|
+| `day5/lesson.py` | The complete payload flow in readable order. |
+| `day5/day5_build_instruction_payload.py` | Compatibility wrapper so the original run command still works. |
+| `day5/pipeline/constants.py` | Defaults and identifier validation patterns. |
+| `day5/pipeline/config.py` | Environment variables and typed runtime config. |
+| `day5/pipeline/logging_utils.py` | JSON logging setup. |
+| `day5/pipeline/models.py` | Chunk, Alpaca, and chat dataclasses. |
+| `day5/pipeline/source.py` | PostgreSQL source query and DataFrame loading. |
+| `day5/pipeline/text.py` | Text normalization, sentence splitting, chunking, and chunk records. |
+| `day5/pipeline/tasks.py` | Summary, classification, keypoint, Alpaca, and chat builders. |
+| `day5/pipeline/validation.py` | Strict payload validation. |
+| `day5/pipeline/split.py` | Deterministic train/validation split. |
+| `day5/pipeline/outputs.py` | JSONL payload writing and manifest creation. |
 
-- `sqlalchemy_url`
-- `alpaca_all_path`, `alpaca_train_path`, `alpaca_val_path`
-- `chat_all_path`, `chat_train_path`, `chat_val_path`
-- `manifest_path`
+## Walkthrough Order For Class
 
-Keeping these as computed properties prevents path-string duplication across functions.
+### 1. Open `day5/lesson.py`
 
-## 5. Record Dataclasses
+Show the payload pipeline in this order:
 
-The script defines three record types:
+```text
+load config
+load source papers
+build chunks
+build Alpaca records
+build chat records
+validate records
+split train/validation ids
+write JSONL payloads
+write manifest
+```
 
-- `ChunkRecord`: one chunk produced from one paper.
-- `AlpacaRecord`: strict instruction/input/output payload row.
-- `ChatRecord`: strict messages payload row.
+Do not open the chunking algorithm first.
 
-These dataclasses make the transformation stages explicit and testable.
+### 2. Explain The Source
 
-## 6. Config Validation Helpers
+Open `day5/pipeline/source.py`.
 
-The parser helpers (`parse_positive_int`, `parse_non_negative_int`, `parse_ratio`, `validate_identifier`) enforce safe settings:
+Students only need to understand:
 
-- numeric fields cannot be malformed
-- overlap cannot exceed chunk size
-- table/order identifiers are validated before SQL interpolation
+- the source is `training_data.clean_papers`
+- each row provides title, summary, category, and id
+- optional `DAY5_MAX_PAPERS` can limit the run
 
-This is defensive coding that prevents hidden runtime surprises.
+The teaching point:
 
-## 7. Loading Config
+> Day 5 starts from clean data; it should not re-solve ingestion.
 
-`load_config()` reads `.env`, validates required PostgreSQL values, and loads Day 5 options.
+### 3. Explain Chunking
 
-It also resolves output paths relative to the repository root, matching earlier day patterns.
+Open `day5/pipeline/text.py`.
 
-## 8. Text Normalization and Sentence Splitting
+Focus on:
 
-Core text helpers:
+- `normalize_whitespace`
+- `split_sentences`
+- `chunk_text`
+- `build_chunk_records`
 
-- `normalize_whitespace()`: collapses repeated spaces/newlines.
-- `split_sentences()`: sentence-like split using regex boundaries.
-- `word_count()`: simple token count for validation and chunking logic.
-- `tail_words()`: overlap bridge between consecutive chunks.
+The teaching point:
 
-These functions provide deterministic preprocessing without introducing heavy NLP dependencies.
+> Large source text needs stable, bounded chunks before it can become training examples.
 
-## 9. Chunking Algorithm
+### 4. Explain Task Generation
 
-The chunking path combines three helpers:
+Open `day5/pipeline/tasks.py`.
 
-- `split_long_sentence()`: window-splits oversized sentences.
-- `chunk_text()`: packs sentences up to max words and applies overlap.
-- `build_chunk_records()`: converts source rows into typed chunk records.
+Focus on the three generated task types:
 
-Behavior details:
+- summarize
+- classify
+- keypoints
 
-- chunk strategy is sentence-first
-- overlap is word-based tail carryover
-- each chunk gets a stable hashed `chunk_id`
+Then show the two output formats:
 
-This matches your chosen strategy: sentence-based chunks with overlap and capped chunk size.
+- Alpaca-style records
+- chat-style records
 
-## 10. Source Query
+The teaching point:
 
-`build_source_sql()` selects:
+> One source chunk can produce multiple supervised examples.
 
-- `paper_key`
-- `title`
-- `summary`
-- `primary_category`
-- `published_at`
+### 5. Explain Validation
 
-`load_source_frame()` executes the SQL via SQLAlchemy and returns a DataFrame.
+Open `day5/pipeline/validation.py`.
 
-If no rows are returned, the script fails fast.
+Focus on:
 
-## 11. Instruction Task Templates
+- duplicate ids
+- empty instruction/input/output fields
+- minimum input length
+- minimum output length
+- chat message shape
 
-`build_instruction_triples()` generates three tasks per chunk:
+The teaching point:
 
-- `summarize`
-- `classify`
-- `keypoints`
+> Payload files should fail fast before training if the examples are malformed.
 
-Output generation is deterministic:
+### 6. Explain Splitting
 
-- summary uses leading extractive sentences
-- classification returns the row primary category
-- keypoints uses top sentence bullets
+Open `day5/pipeline/split.py`.
 
-This gives consistent labels without requiring an online model call.
+Focus on:
 
-## 12. Format Builders
+- fixed random seed
+- train/validation ratio
+- non-empty split checks
 
-`build_alpaca_records()` creates strict Alpaca rows with:
+The teaching point:
 
-- `instruction`
-- `input`
-- `output`
-- metadata block
+> Reproducible splits make model experiments easier to compare.
 
-`build_chat_records()` maps each Alpaca row to a strict two-message chat format:
+### 7. Explain Outputs
 
-- one `user` message
-- one `assistant` message
+Open `day5/pipeline/outputs.py`.
 
-This fulfills the dual-export requirement in one run.
+Focus on:
 
-## 13. Strict Validation
+- JSONL writers
+- all/train/validation files
+- manifest metadata
 
-Validation functions:
+The teaching point:
 
-- `validate_alpaca_records()`
-- `validate_chat_records()`
+> A good training-data pipeline writes both payloads and metadata about how they were made.
 
-Checks include:
+## What To Skip On First Pass
 
-- required content presence
-- minimum input/output word counts
-- task-specific output minimums (classification accepts a single category token)
-- unique record IDs
-- strict chat role structure
+Skip these until learners ask:
 
-The script stops on first violation so bad payloads are never exported silently.
+- every regex detail
+- every dataclass field
+- every manifest key
+- every output path property
+- the exact hashing logic
+- every validation branch
 
-## 14. Deterministic Split
+Those details are useful after students understand the payload-building story.
 
-`split_ids()` performs seeded random splitting:
+## Important Teaching Caveat
 
-- default ratio: 90/10
-- default seed: 42
-- ensures neither split is empty
+The generated summaries and keypoints are deterministic and extractive. They are useful for teaching data-shaping mechanics, but they are not a gold-standard production fine-tuning dataset.
 
-Since IDs are stable, reruns with same source and seed produce the same split.
+Say this plainly:
 
-## 15. Output Writers
+> Day 5 teaches payload construction, not perfect annotation quality.
 
-`write_jsonl()` writes line-delimited JSON records for both formats and both splits.
+## Common Student Questions
 
-`build_manifest()` writes run metadata including:
+### Why create chunks?
 
-- source settings
-- chunking settings
-- task counts
-- split statistics
-- file paths
-- validation settings
+Because source documents can be too long or inconsistent. Chunks give each example a bounded input.
 
-The manifest is the audit summary for downstream training steps.
+### Why generate multiple tasks from one chunk?
 
-## 16. Pipeline Orchestration
+Because the same source text can teach different behaviors: summarization, classification, and extraction.
 
-`run_pipeline()` is the Day 5 controller:
+### Why validate before writing?
 
-1. load config
-2. load source frame
-3. build chunks
-4. build Alpaca + chat records
-5. validate records
-6. split train/val deterministically
-7. write all JSONL files
-8. write manifest
-9. log completion metrics
+Because broken training records are much cheaper to fix before they reach a model job.
 
-This mirrors the explicit, beginner-first orchestration style used in prior days.
+### Why write both Alpaca and chat formats?
 
-## 17. Function Map
+Because different fine-tuning tools expect different payload shapes.
 
-Full function map for the Day 5 script:
+### Why write a manifest?
 
-- `configure_logger()`
-- `validate_identifier()`
-- `parse_positive_int()`
-- `parse_non_negative_int()`
-- `parse_ratio()`
-- `resolve_relative_path()`
-- `load_config()`
-- `normalize_whitespace()`
-- `split_sentences()`
-- `word_count()`
-- `tail_words()`
-- `split_long_sentence()`
-- `chunk_text()`
-- `build_source_sql()`
-- `load_source_frame()`
-- `build_chunk_records()`
-- `extractive_summary()`
-- `keypoints_output()`
-- `build_instruction_triples()`
-- `build_alpaca_records()`
-- `build_chat_records()`
-- `validate_alpaca_records()`
-- `validate_chat_records()`
-- `split_ids()`
-- `write_jsonl()`
-- `build_manifest()`
-- `run_pipeline()`
+Because the manifest records how the dataset was produced, which makes experiments easier to reproduce.
 
-## 18. Class Map
+## Instructor Script
 
-Classes used in Day 5:
+Use this short explanation:
 
-- `Day5Config`: runtime configuration and canonical output paths.
-- `ChunkRecord`: one chunk unit tied to source paper metadata.
-- `AlpacaRecord`: strict instruction-tuning tuple in Alpaca layout.
-- `ChatRecord`: strict instruction-tuning tuple in chat layout.
+> Day 5 takes the clean paper text from earlier labs and turns it into supervised training examples. We chunk each paper, generate tasks from each chunk, validate the records, split them into train and validation sets, and write JSONL files plus a manifest.
 
-## 19. Teaching Point
-
-The key lesson is that turning clean tables into fine-tuning datasets is an explicit engineering step. You need chunking policy, schema policy, and validation policy before you have a trustworthy AI payload.
+That is the Day 5 lesson.

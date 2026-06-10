@@ -1,169 +1,194 @@
 # Day 4 Code Walkthrough
 
-This walkthrough explains how the Day 4 workflow wraps the Day 2 and Day 3 labs into one orchestrated sequence with retry handling.
+Day 4 has been refactored so the first file you open in class is small and readable.
 
-## 0. Imports and Libraries
+Start here:
 
-The Day 4 orchestrator uses these imports:
+- `day4/lesson.py`
 
-- `json`: writes the orchestration report.
-- `logging`: records structured runtime logs.
-- `os`: reads environment variables.
-- `subprocess`: runs the Day 2 and Day 3 scripts as child commands.
-- `sys`: passes the current Python interpreter into child commands.
-- `time`: sleeps between outer workflow retry attempts.
-- `dataclasses.dataclass` and `dataclasses.asdict`: define structured report objects and convert them to JSON-ready dictionaries.
-- `datetime`, `timezone`: timestamp log messages and reports.
-- `pathlib.Path`: resolves file and directory paths.
-- `typing.Any`: keeps the snapshot/report typing explicit.
-- `dotenv.load_dotenv`: loads `.env` settings.
-- `prefect.flow`, `prefect.task`, `prefect.get_run_logger`: provide the orchestration framework and retryable tasks.
-- `sqlalchemy.create_engine` and `sqlalchemy.text`: connect to PostgreSQL and gather final counts for the report.
-- `sqlalchemy.engine.Engine`: documents database engine types in helper functions.
+Use the files inside `day4/pipeline/` only when you want to explain one specific implementation detail.
 
-Prefect is the orchestrator here. It gives the lab task retries, flow structure, and readable run logs without requiring a large amount of infrastructure.
+## Big Picture
 
-If you start the local Prefect server with `prefect server start`, the UI becomes the visual companion for this lab.
+Day 4 teaches orchestration: running earlier pipeline steps in the right order with retries and reporting.
 
-## 1. Why Day 4 Exists
+```text
+Run Day 2 ingestion -> create Day 3 views -> run Day 3 export -> write Day 4 report
+```
 
-Day 4 turns the earlier labs into a single pipeline. The point is to show sequencing, orchestration, and recovery instead of manually running each step yourself.
+The important learning idea is:
 
-## 2. The Orchestration Choice
+> A workflow is more than several scripts. It is an ordered recovery plan.
 
-The lab uses Prefect because it is lightweight and readable.
+## What Changes From Day 3
 
-That keeps the code close to the teaching goal:
+Day 3 ran one benchmark pipeline.
 
-- run one step after another
-- retry failed tasks automatically
-- retry the whole workflow if a larger failure happens
+Day 4 coordinates multiple steps:
 
-In this implementation, Prefect is used through the `@task` and `@flow` decorators, plus `get_run_logger()` for task-scoped log messages.
+- run the Day 2 API ingestion
+- provision SQL views
+- run the Day 3 export/benchmark
+- optionally demonstrate failure and retry behavior
+- write an orchestration report
+- optionally serve a Prefect schedule
 
-The UI is where students can see those decorators pay off: the flow appears as a run, each task appears as a node, and failed attempts are visible before the retry succeeds.
+The pipeline shape is:
 
-Day 4 now also supports Prefect-native scheduling. When schedule mode is enabled in `.env`, the script serves a recurring Prefect deployment instead of running once.
+```text
+configure -> validate files -> run workflow -> write report
+```
 
-## 3. What Gets Reused
+## File Map
 
-The workflow does not rewrite Day 2 or Day 3 logic.
+| File | What It Explains |
+|---|---|
+| `day4/lesson.py` | The complete orchestration flow in readable order. |
+| `day4/day4_orchestrated_workflow.py` | Compatibility wrapper so the original run command still works. |
+| `day4/pipeline/constants.py` | Shared paths, defaults, and allowed sabotage settings. |
+| `day4/pipeline/config.py` | Environment variables and typed runtime config. |
+| `day4/pipeline/logging_utils.py` | JSON logging setup. |
+| `day4/pipeline/models.py` | Step and report dataclasses. |
+| `day4/pipeline/paths.py` | Fast checks that required scripts exist. |
+| `day4/pipeline/subprocess_utils.py` | Child process runner for Day 2, SQL, and Day 3. |
+| `day4/pipeline/sabotage.py` | Intentional failure hook for retry demos. |
+| `day4/pipeline/tasks.py` | Prefect task definitions. |
+| `day4/pipeline/workflow.py` | Prefect flow and outer workflow retry loop. |
+| `day4/pipeline/report.py` | Day 4 report and database snapshot. |
+| `day4/pipeline/schedule.py` | Optional Prefect schedule serving. |
 
-Instead, it calls the existing scripts:
+## Walkthrough Order For Class
 
-- `day2/day2_arxiv_api_to_postgres.py`
-- `day3/day3_agent_query_views.sql`
-- `day3/day3_postgres_to_csv_parquet_benchmark.py`
+### 1. Open `day4/lesson.py`
 
-That keeps the earlier labs intact and makes Day 4 easy to understand.
+Show the orchestration in this order:
 
-The workflow reuses the existing scripts instead of importing their internals, which keeps the orchestration layer simple and avoids duplicating Day 2 and Day 3 logic.
+```text
+check required files exist
+load config
+if scheduled mode is enabled, serve schedule
+otherwise run workflow with retries
+write orchestration report
+```
 
-## 4. Execution Order
+Do not open the Prefect task file first.
 
-The workflow runs in this order:
+### 2. Explain The Workflow Shape
 
-1. Day 2 API ingestion.
-2. Day 3 SQL view provisioning.
-3. Day 3 export and benchmark.
-4. Day 4 orchestration report.
+Open `day4/pipeline/workflow.py`.
 
-The Parquet file is created during the last step in that sequence.
+Focus on:
 
-The actual commands are run through `subprocess.run()` inside helper functions, so Day 4 acts as a wrapper around the already working scripts.
+- `day4_flow`
+- `run_with_workflow_retries`
 
-## 5. Task-Level Retries
+The teaching point:
 
-The Day 2, view-provisioning, and Day 3 export steps are each wrapped as Prefect tasks.
+> The workflow defines the order, while the retry wrapper defines recovery.
 
-Each task has retry settings, so a temporary error can be retried without restarting the entire pipeline.
+### 3. Explain The Tasks
 
-Those retries are configured at the task decorator level with `retries=TASK_RETRIES` and `retry_delay_seconds=TASK_RETRY_DELAY_SECONDS`.
+Open `day4/pipeline/tasks.py`.
 
-## 6. Workflow-Level Retry
+Focus on the three tasks:
 
-The full flow is also wrapped in a small outer retry loop.
+- `run_day2_pipeline`
+- `provision_day3_views`
+- `run_day3_export`
 
-That matters for failures that happen after the tasks complete, such as a final validation failure or an injected sabotage checkpoint.
+The teaching point:
 
-The outer retry loop lives in `run_with_workflow_retries()`, which wraps the full Prefect flow and sleeps between attempts.
+> Each task should represent one meaningful pipeline step.
 
-## 7. Sabotage Hook
+### 4. Explain Subprocess Execution
 
-The lab includes a deliberate failure hook controlled by environment variables.
+Open `day4/pipeline/subprocess_utils.py`.
 
-The hook can fail once and leave a marker file behind, which makes the next retry succeed.
+Students only need to understand:
 
-That is useful for teaching because students can see the retry behavior instead of just reading about it.
+- Day 4 reuses earlier scripts
+- each child command gets the project environment
+- failures bubble up through `check=True`
 
-The sabotage behavior is controlled by `DAY4_SABOTAGE_TARGET` and `DAY4_SABOTAGE_MODE`, and the failure is injected by `maybe_trigger_sabotage()`.
+The teaching point:
 
-In the Prefect UI, that sabotage shows up as a failed task or flow attempt first, followed by a retried run when the marker file allows the next attempt to continue.
+> Orchestration often coordinates existing tools instead of rewriting them.
 
-## 8. Why the Marker File Helps
+### 5. Explain Sabotage And Retries
 
-The marker file makes the failure deterministic.
+Open `day4/pipeline/sabotage.py`.
 
-Without it, retries can be hard to explain because the failure may or may not happen again in the same way.
+Focus on:
 
-With it, the first attempt fails on purpose and the retry succeeds.
+- `DAY4_SABOTAGE_TARGET`
+- `DAY4_SABOTAGE_MODE`
+- marker file for one-time failure
 
-## 9. Day 4 Report
+The teaching point:
 
-The workflow writes a report to `day4/output/` so you can review the run later.
+> Controlled failure makes retry behavior visible and less magical.
 
-The report summarizes:
+### 6. Explain Reporting
 
-- which steps ran
-- how many attempts were needed
-- where the Day 2 and Day 3 artifacts were written
-- whether sabotage was enabled
+Open `day4/pipeline/report.py`.
 
-The report is written by `write_day4_report()` and includes step results, database counts, and a summary of the Day 3 benchmark report.
+Focus on:
 
-That report gives the classroom a second place to inspect the run after the UI, especially if the UI is not open anymore.
+- step results
+- Day 3 report summary
+- database row counts
 
-## 10. Teaching Value
+The teaching point:
 
-This lab gives students the main orchestration ideas without overwhelming them:
+> A workflow should leave behind evidence of what happened.
 
-- step ordering
-- retries
-- failure boundaries
-- idempotent downstream work
+### 7. Explain Scheduling Last
 
-That is enough to make the next conversation about production orchestration much easier.
+Open `day4/pipeline/schedule.py` only after the one-shot workflow is clear.
 
-## 11. Function Map
+The teaching point:
 
-Here is the full function map for the Day 4 file:
+> Scheduling is just another way to trigger the same workflow repeatedly.
 
-- `configure_logger()`: creates the JSON logger.
-- `parse_positive_int()`: validates integer configuration values.
-- `resolve_relative_path()`: resolves relative output paths.
-- `validate_choice()`: checks the sabotage settings against allowed values.
-- `parse_bool()`: parses boolean schedule flags from environment values.
-- `load_config()`: loads and validates Day 4 environment settings.
-- `resolve_schedule_seconds()`: converts the configured day/hour schedule into seconds.
-- `ensure_paths_exist()`: checks that the Day 2 and Day 3 files exist before the workflow starts.
-- `run_subprocess()`: runs a child script or SQL command.
-- `maybe_trigger_sabotage()`: injects a controlled failure for retry demos.
-- `run_day2_pipeline()`: Prefect task that runs the Day 2 ingestion script.
-- `provision_day3_views()`: Prefect task that creates the Day 3 views and materialized views.
-- `run_day3_export()`: Prefect task that runs the Day 3 export and benchmark script.
-- `day4_flow()`: the Prefect flow that runs the three steps in order.
-- `collect_database_snapshot()`: gathers final row counts for the report.
-- `load_day3_report_summary()`: loads the Day 3 benchmark summary if it exists.
-- `write_day4_report()`: writes the final orchestration report.
-- `run_with_workflow_retries()`: wraps the flow in outer retries.
-- `day4_scheduled_flow()`: scheduled wrapper flow used by Prefect native schedule mode.
-- `serve_prefect_schedule()`: serves the scheduled deployment with a configurable interval.
-- `main()`: command-line entry point.
+## What To Skip On First Pass
 
-## 12. Class Map
+Skip these until learners ask:
 
-The Day 4 file uses three dataclasses:
+- every Prefect decorator option
+- every report field
+- every database snapshot query
+- every schedule serving detail
+- exact subprocess command construction
+- every environment variable
 
-- `Day4Config`: stores configuration, paths, retry settings, and sabotage settings.
-- `WorkflowStepResult`: stores the outcome of one orchestration step.
-- `WorkflowReport`: stores the final JSON summary written at the end of the run.
+Those details are useful after students understand orchestration order.
+
+## Common Student Questions
+
+### Why does Day 4 run Day 2 and Day 3 instead of copying their code?
+
+Because orchestration should coordinate reusable units, not duplicate logic.
+
+### Why are there task retries and workflow retries?
+
+Task retries handle local failures. Workflow retries handle larger boundary failures.
+
+### Why include sabotage?
+
+Because students learn retries faster when they can intentionally trigger a failure and watch recovery happen.
+
+### Why write a Day 4 report?
+
+Because logs scroll away. A report gives the workflow a durable summary.
+
+### Why is scheduling optional?
+
+Because learners should understand one successful run before learning repeated scheduled runs.
+
+## Instructor Script
+
+Use this short explanation:
+
+> Day 4 turns earlier scripts into a workflow. It runs ingestion first, creates query views second, runs exports third, and writes a report at the end. The retry demo shows how orchestration helps a pipeline recover from temporary failures.
+
+That is the Day 4 lesson.

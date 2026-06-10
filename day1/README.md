@@ -21,7 +21,9 @@ Dataset used for Day 1:
 
 ## Files
 
-- `day1_hf_csv_to_postgres.py`: one-shot Day 1 pipeline script.
+- `lesson.py`: small teaching-first pipeline entrypoint.
+- `pipeline/`: focused modules for config, extract, transform, load, checks, and outputs.
+- `day1_hf_csv_to_postgres.py`: compatibility entrypoint for the original run command.
 - `DAY1_CODE_WALKTHROUGH.md`: beginner-friendly section-by-section script explanation.
 - `output/`: downloaded raw file and rejected sample output files.
 
@@ -50,6 +52,12 @@ pip install -r requirements.txt
 
 ```bash
 python day1/day1_hf_csv_to_postgres.py
+```
+
+For teaching, open the smaller entrypoint first:
+
+```bash
+python day1/lesson.py
 ```
 
 ## Target Database Objects

@@ -1,204 +1,229 @@
 # Day 2 Code Walkthrough
 
-This walkthrough explains the Day 2 pipeline at a teaching pace. The goal is to show how a live API feed becomes a clean, repeatable, database-backed training corpus without hiding the important implementation details.
+Day 2 has been refactored so the first file you open in class is small and readable.
 
-## 0. Imports and Libraries
+Start here:
 
-The script imports the following modules and each one has a specific job:
+- `day2/lesson.py`
 
-- `csv`: parses and writes CSV-style data used in helper routines.
-- `hashlib`: creates stable SHA256 hashes so rows can be deduplicated safely.
-- `json`: serializes raw payloads and structured logs.
-- `logging`: writes the structured runtime logs.
-- `os`: reads environment variables.
-- `re`: validates and normalizes query/text patterns.
-- `time`: provides sleep-based rate limiting and backoff.
-- `xml.etree.ElementTree as ET`: parses the ArXiv Atom/XML feed.
-- `dataclasses.dataclass`: defines small typed configuration objects.
-- `datetime`, `timedelta`, `timezone`: handle timestamps and watermark logic.
-- `pathlib.Path`: handles file paths in a readable, cross-platform way.
-- `typing.Any`: keeps nested payload annotations explicit.
-- `uuid.uuid4`: creates batch identifiers.
-- `requests`: performs HTTP requests to the ArXiv API.
-- `dotenv.load_dotenv`: loads local environment variables from `.env`.
-- `requests.Response`: documents the response object type.
-- `requests.exceptions.RequestException`: catches network and transport failures.
-- `sqlalchemy.create_engine` and `sqlalchemy.text`: connect to PostgreSQL and run SQL.
-- `sqlalchemy.engine.Engine`: annotates the database engine type.
+Use the files inside `day2/pipeline/` only when you want to explain one specific implementation detail.
 
-The supporting pattern here is simple: standard library for parsing and control flow, `requests` for HTTP, and SQLAlchemy for PostgreSQL.
+## Big Picture
 
-## 1. Why Day 2 Exists
+Day 2 teaches how a live API feed becomes clean, repeatable, database-backed training data.
 
-Day 1 used a static CSV. Day 2 adds a live API, pagination, nested records, retries, and a small persistence layer for sync state. That is a more realistic ingestion pattern and it is closer to what students will see in production.
+```text
+ArXiv API -> Atom/XML parser -> clean/reject split -> PostgreSQL -> watermark
+```
 
-## 2. Why ArXiv Works Well for Teaching
+The important learning idea is:
 
-ArXiv is public, stable, and easy to query. The feed returns paper metadata, repeated authors, categories, and links. That gives us enough structure to practice flattening without needing a complex auth setup. It also supports larger pulls, which helps us build a corpus big enough for baseline deep learning experiments.
+> Live sources need pagination, validation, idempotent loading, and state.
 
-## 3. The Real Payload Shape
+## What Changes From Day 1
 
-The API returns Atom/XML, not JSON. Each entry includes paper metadata, repeated `<author>` nodes, category tags, and link elements. The script first converts each entry into a nested Python dictionary and only then flattens it.
+Day 1 used a static CSV.
 
-## 4. Configuration
+Day 2 adds:
 
-The script reads environment variables for PostgreSQL and ArXiv settings. This keeps secrets out of the code and makes the lab easy to change in class.
+- a live API
+- XML parsing
+- pagination
+- repeated authors
+- a child table
+- retry/backoff behavior
+- a database watermark
 
-Important settings for the larger Day 2 run:
+That is why Day 2 is more complex, but the pipeline shape is still familiar:
 
-- `ARXIV_CATEGORIES` drives the multi-category crawl.
-- `ARXIV_SEARCH_QUERY` may be left blank; the script builds the query from `ARXIV_CATEGORIES`.
-- `ARXIV_MAX_PAPERS=10000` makes the lab large enough for a meaningful training corpus.
-- `ARXIV_DEFAULT_LOOKBACK_DAYS` controls how far back the first incremental run starts.
-- `ARXIV_REQUEST_TIMEOUT_SECONDS`, `ARXIV_REQUEST_MAX_RETRIES`, `ARXIV_RETRY_BACKOFF_SECONDS`, and `ARXIV_USER_AGENT` keep the public API pull polite and resilient.
+```text
+configure -> extract -> parse -> transform -> load -> check
+```
 
-The `load_config()` function also validates PostgreSQL settings, so the script fails early if a required secret or connection value is missing.
+## File Map
 
-## 5. Logging
+| File | What It Explains |
+|---|---|
+| `day2/lesson.py` | The complete pipeline flow in readable order. |
+| `day2/day2_arxiv_api_to_postgres.py` | Compatibility wrapper so the original run command still works. |
+| `day2/pipeline/constants.py` | Schema names, table names, XML namespaces, and default categories. |
+| `day2/pipeline/config.py` | Environment variables and typed runtime config. |
+| `day2/pipeline/logging_utils.py` | JSON logging setup. |
+| `day2/pipeline/extract.py` | ArXiv API requests, retries, and page fetching. |
+| `day2/pipeline/parse.py` | Atom/XML entry parsing and paper-record normalization. |
+| `day2/pipeline/transform.py` | Clean/rejected record splitting. |
+| `day2/pipeline/load.py` | PostgreSQL schema creation and upserts. |
+| `day2/pipeline/state.py` | Watermark read/write logic. |
+| `day2/pipeline/outputs.py` | Rejected sample CSV export. |
+| `day2/pipeline/checks.py` | Post-load quality checks. |
 
-The script uses structured JSON logging so the console output stays machine-readable and easy to debug. This matters because the pipeline needs to explain network retries, pagination progress, and load results without exposing secrets.
+## Walkthrough Order For Class
 
-The logger is configured by `configure_logger()`, and the custom `JsonFormatter` class formats each record as JSON with timestamp, level, message, module, function, and line number.
+### 1. Open `day2/lesson.py`
 
-## 6. Pagination
+Show the pipeline in this order:
 
-The pipeline requests the feed page by page, using `start` and `max_results`. It sleeps between requests so the class can talk about rate limiting and respectful API use.
+```text
+load config
+create tables
+resolve ingestion window
+build ArXiv query
+fetch pages
+split clean and rejected entries
+load raw, clean, authors, and rejected rows
+update watermark
+export rejected sample
+run checks
+```
 
-The paginator stops when one of these happens:
+Do not open every helper module yet.
 
-- the requested paper limit is reached,
-- the feed returns fewer rows than requested,
-- or repeated API failures exhaust retries.
+### 2. Explain Configuration
 
-That makes the loop easy to reason about and safe to rerun.
+Open `day2/pipeline/config.py`.
 
-The pagination behavior is implemented in the API request helpers and the main pipeline loop, which use `requests`, `time.sleep`, and the retry counters from configuration.
+Students only need to understand:
 
-## 7. Watermark State
+- ArXiv settings come from `.env`
+- PostgreSQL settings come from `.env`
+- categories can build the search query automatically
+- request timeout/retry settings make live API calls safer
 
-Instead of storing pagination state in memory, the script keeps a small watermark table in PostgreSQL. The watermark records the latest published timestamp and the last paper key seen.
+The teaching point:
 
-This is the simplest durable option for a class demo because it avoids external state files and still supports incremental runs.
+> Live API pipelines should be configurable without changing code.
 
-The watermark is managed through the `pipeline_state` table and the `get_state()` / `upsert_state()` functions.
+### 3. Explain Extraction
 
-## 8. Why This Is the Best Balance
+Open `day2/pipeline/extract.py`.
 
-This approach is simple enough to explain, but durable enough for repeated runs. It avoids duplicate inserts while still showing a real production pattern.
+Focus on:
 
-It is a better teaching choice than a pure in-memory cursor because it shows where state should live when the pipeline is restarted.
+- `build_search_query`
+- `request_feed_page`
+- `fetch_feed_page`
 
-## 9. Parsing the Feed
+The teaching point:
 
-Each entry is parsed into a nested dictionary containing the paper id, title, summary, timestamps, categories, author list, links, and the original payload.
+> Extraction handles network behavior: request parameters, retries, rate limits, and response parsing.
 
-The parser also creates a stable row hash. That helps the script identify the same paper across repeated runs even when the raw feed is re-read.
+### 4. Explain Parsing
 
-Parsing is handled by helper functions that use `xml.etree.ElementTree`, namespace maps, and the `stable_hash()` function.
+Open `day2/pipeline/parse.py`.
 
-## 10. Normalizing the Paper Record
+Focus on:
 
-The clean papers table keeps the core analytical fields:
+- `normalize_arxiv_id`
+- `entry_element_to_record`
+- author extraction
+- category extraction
 
-- paper id
-- version
-- title
-- summary
-- published and updated timestamps
-- primary category
-- all categories as JSON
-- author summary fields
-- ArXiv and PDF links
+The teaching point:
 
-This is the table students would normally query first when training a model or doing exploration.
+> Parsing converts source-specific XML into normal Python records the rest of the pipeline can understand.
 
-The fields written here are built in the flattening and upsert functions, especially `upsert_clean_records()` and the parsing helpers that prepare the rows.
+### 5. Explain Transformation
 
-## 11. Normalizing Authors
+Open `day2/pipeline/transform.py`.
 
-Repeated authors are written to `paper_authors` as one row per author per paper. That is the normalized part of the model.
+Focus on:
 
-The relationship is one paper to many authors. This is why the author table uses `(paper_key, author_order)` as its conflict key.
+- missing paper ids
+- missing title/summary
+- missing timestamps
+- missing primary category
+- missing authors
 
-The author table is written by `upsert_author_records()`, which expands the nested author list into a single row per author.
+The teaching point:
 
-## 12. Why There Is No Affiliation Table
+> Validation decides which records are safe enough for the clean table.
 
-The live feed does not reliably provide affiliations. Since the data does not support it, the script does not invent it.
+### 6. Explain Loading
 
-That is a deliberate teaching point: schema design should follow the source data, not assumptions.
+Open `day2/pipeline/load.py`.
 
-## 13. Rejected Records
+Do not explain every SQL column line-by-line.
 
-Malformed or incomplete entries are written to a rejected table with the raw payload and a reason string.
+Focus on the four destinations:
 
-In the current 10k+ configuration, the rejection table is usually empty, but the path still matters because it shows how to preserve failures for review.
+- raw ArXiv entries
+- clean papers
+- paper authors
+- rejected entries
 
-Rejected rows are produced by `split_clean_and_reject()` and written by `upsert_rejected_records()`.
+The teaching point:
 
-## 14. Raw Records
+> Nested source data often becomes multiple relational tables.
 
-The raw table stores the parsed nested payload. This preserves traceability if a student wants to inspect what was received from the API.
+### 7. Explain State
 
-Raw records are also useful for replay and debugging if the flattening logic changes later.
+Open `day2/pipeline/state.py`.
 
-Raw rows are written by `upsert_raw_records()`, which preserves the parsed payload for auditability.
+Focus on:
 
-## 15. Idempotency
+- `resolve_ingestion_window`
+- `update_state_from_latest_entry`
 
-All target tables use conflict keys so repeated runs do not create duplicates. The paper table upserts by normalized paper key, and the author table upserts by paper key plus author order.
+The teaching point:
 
-The state table stores the watermark in PostgreSQL, so repeated executions can resume from the last successful pull.
+> A pipeline that runs repeatedly needs to remember where it stopped.
 
-The conflict-handling logic lives in the SQL inside the upsert functions and is what makes the Day 2 load safe to rerun.
+### 8. Explain Checks
 
-## 16. Post-Load Checks
+Open `day2/pipeline/checks.py`.
 
-The script checks row counts, rejected counts, and a few quality conditions after load. That gives learners immediate feedback that the pipeline worked.
+Focus on:
 
-The checks are intentionally simple: counts, null checks, and duplicate-key checks are enough for a classroom demo and easy for beginners to understand.
+- raw row count
+- clean row count
+- author row count
+- rejected row count
+- null violations
+- duplicate author keys
 
-Those checks are grouped in `run_post_load_checks()` so the validation remains separate from the ingestion and loading steps.
+The teaching point:
 
-## 17. Why This Can Train a Model
+> The pipeline should prove that the load worked before we trust the output.
 
-This dataset is suitable for baseline machine learning and starter deep learning because it has enough rows, rich summaries, authors, and multiple categories.
+## What To Skip On First Pass
 
-Best first model targets:
+Skip these until learners ask:
 
-- classify `primary_category` from `title + summary`,
-- train semantic embeddings for retrieval,
-- or build a multi-label classifier if you expand the category set further.
+- full XML namespace details
+- every SQL DDL line
+- every retry/backoff branch
+- every field in the raw payload
+- every environment variable
+- every logging context field
 
-## 18. Teaching Point
+Those details are useful after students understand the main pipeline shape.
 
-The important lesson is not just how to call an API. It is how to turn a live, slightly messy feed into stable analytical tables that survive repeated execution.
+## Common Student Questions
 
-## 19. Function Map
+### Why does Day 2 need a watermark?
 
-This is the full function map in the script so learners can trace the code from top to bottom:
+Because the source is live. If the pipeline runs tomorrow, it should know where the previous run ended.
 
-- `configure_logger()`: creates the JSON logger.
-- `parse_csv_list()`: turns comma-separated environment values into a list.
-- `parse_positive_int()`: validates integer configuration values.
-- `load_config()`: loads and validates environment settings.
-- `stable_hash()`: generates deterministic row hashes.
-- `strip_text()`: normalizes text fields.
-- `parse_iso_timestamp()`: parses ArXiv timestamps.
-- `build_search_query()`: constructs the ArXiv search string.
-- `request_feed_page()`: fetches one API page with retries.
-- `split_clean_and_reject()`: separates valid rows from invalid rows.
-- `upsert_raw_records()`: saves raw payloads.
-- `upsert_clean_records()`: saves flattened paper rows.
-- `upsert_author_records()`: saves one row per author.
-- `upsert_rejected_records()`: saves rejected rows and reasons.
-- `get_state()`: reads the persisted watermark.
-- `upsert_state()`: writes the updated watermark.
-- `run_post_load_checks()`: validates the load after inserts.
-- `run_pipeline()`: runs the full ingestion flow.
+### Why store authors separately?
 
-## 20. Class Map
+Because one paper can have many authors. A child table models that repeated relationship cleanly.
 
-The Day 2 script is mostly functional, but the `PipelineConfig` dataclass is the one class that matters here.
+### Why keep raw entries?
 
-- `PipelineConfig`: groups all ArXiv and PostgreSQL settings into one typed object so the rest of the script can pass around one clear config instead of many loose variables.
+Because raw entries let us audit, replay, and debug the parser later.
+
+### Why still keep rejected records?
+
+Because rejected records show whether the source is incomplete or whether our validation rules are too strict.
+
+### Why use upserts?
+
+Because API pages can overlap across runs. Upserts make repeated ingestion safer.
+
+## Instructor Script
+
+Use this short explanation:
+
+> Day 2 takes a live ArXiv feed and treats it like a production source. We query it in pages, parse the XML, normalize each paper, split valid and invalid records, write papers and authors into PostgreSQL, and store a watermark so the next run knows where to continue.
+
+That is the Day 2 lesson.

@@ -22,7 +22,9 @@ This day turns data engineering outputs into model-ready supervised fine-tuning 
 
 ## Files
 
-- `day5_build_instruction_payload.py`: Day 5 payload generation pipeline.
+- `lesson.py`: small teaching-first payload generation entrypoint.
+- `pipeline/`: focused modules for config, source loading, chunking, tasks, validation, splitting, and outputs.
+- `day5_build_instruction_payload.py`: compatibility entrypoint for the original run command.
 - `README.md`: Day 5 quickstart and runbook.
 - `DAY5_CODE_WALKTHROUGH.md`: detailed section-by-section explanation.
 - `output/`: generated payload and manifest artifacts.
@@ -39,6 +41,12 @@ pip install -r requirements.txt
 
 ```bash
 python day5/day5_build_instruction_payload.py
+```
+
+For teaching, open the smaller entrypoint first:
+
+```bash
+python day5/lesson.py
 ```
 
 ## Default Inputs and Outputs

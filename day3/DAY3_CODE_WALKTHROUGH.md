@@ -1,194 +1,185 @@
 # Day 3 Code Walkthrough
 
-This walkthrough explains how the Day 3 pipeline turns PostgreSQL data into CSV and Parquet, then measures the real difference in read performance and file size.
+Day 3 has been refactored so the first file you open in class is small and readable.
 
-## 0. Imports and Libraries
+Start here:
 
-Every import in the script has a specific purpose:
+- `day3/lesson.py`
 
-- `gc`: forces a garbage-collection pass before each benchmark run to reduce memory noise.
-- `json`: writes the benchmark report to disk.
-- `logging`: records structured runtime logs.
-- `os`: reads environment variables.
-- `re`: validates SQL identifier-like settings.
-- `time`: measures elapsed time with nanosecond precision.
-- `dataclasses.dataclass`: defines the typed config and result containers.
-- `datetime`, `timezone`: timestamps the report and logs.
-- `pathlib.Path`: manages output paths.
-- `statistics.mean` and `statistics.median`: compute benchmark summary values.
-- `typing.Any` and `typing.Callable`: keep the code explicit and typed.
-- `pandas as pd`: loads SQL results, writes CSV, and prints the summary table.
-- `pyarrow as pa`: converts the pandas frame into an Arrow table for Parquet writing.
-- `pyarrow.csv as pacsv`: benchmarks direct CSV reads with PyArrow.
-- `pyarrow.parquet as pq`: writes Parquet and benchmarks direct Parquet reads.
-- `dotenv.load_dotenv`: loads local environment variables.
-- `sqlalchemy.create_engine` and `sqlalchemy.text`: connect to PostgreSQL and run the source query.
-- `sqlalchemy.engine.Engine`: documents the engine type.
+Use the files inside `day3/pipeline/` only when you want to explain one specific implementation detail.
 
-The structure is intentionally straightforward: pandas handles the dataframe workflow, PyArrow handles the columnar format, and SQLAlchemy handles the database connection.
+## Big Picture
 
-## 1. Why Day 3 Exists
+Day 3 teaches why file format choices matter for analytical and AI workloads.
 
-Day 3 is the "prove the math" lab. The goal is not only to export data, but also to show why file format choice matters for analytics.
+```text
+PostgreSQL clean table -> CSV export + Parquet export -> read benchmark -> JSON report
+```
 
-## 2. Why We Start From PostgreSQL
+The important learning idea is:
 
-The Day 2 lab already cleaned and normalized the data. That means Day 3 can focus on the storage layer instead of cleaning logic.
+> The same data can be stored in different formats, and those formats affect size, speed, and downstream usability.
 
-## 3. The Core Idea
+## What Changes From Day 2
 
-The same data is written to two formats:
+Day 2 focused on ingestion.
 
-- CSV for simplicity and portability
-- Parquet for analytical performance
+Day 3 starts from already-clean data and asks:
 
-Then the script reads both formats several times and compares the results.
+- How do we export it?
+- Which format is smaller?
+- Which format reads faster?
+- How do we prove the difference?
 
-## 4. Configuration
+The pipeline shape is:
 
-The script reads its settings from environment variables so students can adjust the lab without editing code.
+```text
+configure -> query source -> export files -> benchmark reads -> report results
+```
 
-Important values:
+## File Map
 
-- `DAY3_SOURCE_TABLE`: the PostgreSQL table to query
-- `DAY3_ORDER_BY`: the stable sort column for deterministic exports
-- `DAY3_OUTPUT_DIR`: where the benchmark files are written
-- `DAY3_EXPORT_BASENAME`: the shared file name prefix
-- `DAY3_BENCHMARK_RUNS`: how many times each reader is timed
+| File | What It Explains |
+|---|---|
+| `day3/lesson.py` | The complete benchmark flow in readable order. |
+| `day3/day3_postgres_to_csv_parquet_benchmark.py` | Compatibility wrapper so the original run command still works. |
+| `day3/pipeline/constants.py` | Defaults and identifier validation patterns. |
+| `day3/pipeline/config.py` | Environment variables and typed runtime config. |
+| `day3/pipeline/logging_utils.py` | JSON logging setup. |
+| `day3/pipeline/models.py` | Small result/artifact dataclasses. |
+| `day3/pipeline/source.py` | PostgreSQL source query and DataFrame loading. |
+| `day3/pipeline/exports.py` | CSV and Parquet writing. |
+| `day3/pipeline/benchmark.py` | Repeated read timing for pandas and PyArrow. |
+| `day3/pipeline/report.py` | JSON report and classroom summary table. |
+| `day3/day3_agent_query_views.sql` | Optional SQL views for agent-style analysis. |
 
-The `Day3Config` class packages these values into one typed object so the rest of the script stays readable.
+## Walkthrough Order For Class
 
-## 5. Logging
+### 1. Open `day3/lesson.py`
 
-The script uses JSON logs, just like the earlier labs. That keeps progress messages structured and easy to inspect.
+Show the pipeline in this order:
 
-The `JsonFormatter` class creates the JSON log record, and `configure_logger()` installs it on the `day3_benchmark` logger.
+```text
+load config
+create database engine
+load clean source data
+prepare export frame
+write CSV and Parquet
+benchmark reads
+build report
+print summary
+```
 
-## 6. The Source Query
+Do not open benchmark internals first.
 
-The source query reads from `training_data.clean_papers` and orders rows by `paper_key`.
+### 2. Explain The Source
 
-It also casts JSONB columns to text so CSV and Parquet export the same logical content.
+Open `day3/pipeline/source.py`.
 
-The query itself is built by `build_source_sql()`, and the data is loaded by `load_source_frame()` using `pd.read_sql_query()`.
+Students only need to understand:
 
-## 7. Why We Keep the Export Deterministic
+- the source is `training_data.clean_papers`
+- rows are ordered deterministically
+- JSONB columns are exported as text
+- the result becomes a pandas DataFrame
 
-Every run overwrites the same output files.
+The teaching point:
 
-That makes the lab easy to explain because students can rerun it and compare the same filenames.
+> Day 3 trusts Day 2's clean table and turns it into portable analytical files.
 
-## 8. Writing CSV
+### 3. Explain Exports
 
-The script uses pandas to write the export frame to UTF-8 CSV.
+Open `day3/pipeline/exports.py`.
 
-CSV is the most familiar interchange format, but it is not the best choice for analytical workloads.
+Focus on:
 
-That work is done inside `write_exports()`, which first writes the CSV path from `Day3Config.csv_path`.
+- `frame.to_csv(...)`
+- `pa.Table.from_pandas(...)`
+- `pq.write_table(..., compression="snappy")`
+- file size metadata
 
-## 9. Writing Parquet With PyArrow
+The teaching point:
 
-The Parquet file is written using PyArrow.
+> CSV is simple and readable; Parquet is columnar and optimized for analytics.
 
-That matters because the lab is specifically showing a modern columnar export path, not just a generic dataframe save.
+### 4. Explain Benchmarks
 
-The same `write_exports()` function converts the pandas dataframe to an Arrow table with `pa.Table.from_pandas()` and then writes Parquet using `pq.write_table()`.
+Open `day3/pipeline/benchmark.py`.
 
-## 10. Why Snappy Compression
+Focus on:
 
-Snappy is a good teaching default.
+- pandas reads CSV
+- pandas reads Parquet
+- PyArrow reads CSV
+- PyArrow reads Parquet
+- each read is repeated several times
 
-It gives a meaningful size reduction without making the example harder to understand or slower to write.
+The teaching point:
 
-## 11. Benchmark Warmup
+> Benchmarks should measure the same data through comparable readers.
 
-Before the timed runs begin, the script performs a warmup read for each reader.
+### 5. Explain The Report
 
-That reduces first-run noise and keeps the benchmark focused on file format differences instead of import overhead.
+Open `day3/pipeline/report.py`.
 
-The warmup pass happens inside `run_benchmarks()`, before the timed runs start.
+Focus on:
 
-## 12. Benchmark Readers
+- source row count
+- file sizes
+- read timings
+- speedup and size reduction summary
 
-The script measures four reads:
+The teaching point:
 
-- `pandas.read_csv`
-- `pandas.read_parquet` with the `pyarrow` engine
-- `pyarrow.csv.read_csv`
-- `pyarrow.parquet.read_table`
+> A benchmark is only useful if the result is captured and explainable.
 
-This gives learners both a pandas view and a direct PyArrow view of the same data.
+### 6. Optional: Explain Agent Views
 
-The four readers are defined in `run_benchmarks()` and timed by `measure_reader()`.
+Open `day3/day3_agent_query_views.sql` only after the benchmark lesson.
 
-## 13. Timing Method
+The teaching point:
 
-Each reader is timed across `DAY3_BENCHMARK_RUNS` repetitions.
+> Clean data can also be reshaped into stable SQL surfaces for agents or dashboards.
 
-For each reader, the script records:
+## What To Skip On First Pass
 
-- average read time in milliseconds
-- median read time in milliseconds
-- minimum and maximum read time
-- row count returned by the reader
+Skip these until learners ask:
 
-## 14. File Size Math
+- every field in the SELECT list
+- every timing helper detail
+- garbage collection before timing
+- PyArrow internals
+- materialized view internals
+- every JSON report key
 
-The script compares file sizes in megabytes.
+Those details are useful after students understand the format comparison story.
 
-It also calculates the size reduction percentage from CSV to Parquet so the storage difference is easy to explain.
+## Common Student Questions
 
-## 15. What the JSON Report Stores
+### Why compare CSV and Parquet?
 
-The JSON benchmark report includes:
+Because CSV is common and readable, while Parquet is often better for analytics and machine learning pipelines.
 
-- source table metadata
-- export file paths and sizes
-- detailed timing results
-- the summary comparison rows used in the console
+### Why use both pandas and PyArrow?
 
-The report is assembled by `build_report()` and written by `write_report()`.
+Because learners should see that performance depends on both file format and reader library.
 
-## 16. What Students Should Notice
+### Why repeat reads?
 
-If everything is working correctly, Parquet should be smaller than CSV.
+One timing can be noisy. Repeated reads give a more stable comparison.
 
-For read speed, pandas usually shows the clearest Parquet win on this dataset, while the PyArrow comparison reminds students that the reader library also affects timing.
+### Why write a JSON report?
 
-The exact numbers depend on the machine and cache state, which is why the lab prints the real measured results instead of making a guess.
+Because benchmark results should be saved, not just printed once and forgotten.
 
-## 17. Teaching Point
+### Why keep deterministic output names?
 
-The most important lesson is that storage format is part of pipeline design.
+Because this lab is about comparison. Reusing the same names makes each run easy to find and inspect.
 
-When a dataset is read repeatedly, a better file format can save both time and space with very little extra complexity.
+## Instructor Script
 
-## 18. Function Map
+Use this short explanation:
 
-This is the full function map so learners can trace the file from top to bottom:
+> Day 3 starts with the clean papers from Day 2. We export the same rows to CSV and Parquet, read both files several times with pandas and PyArrow, then write a report showing size and speed differences.
 
-- `configure_logger()`: creates the JSON logger.
-- `validate_identifier()`: ensures SQL-safe identifier formatting.
-- `parse_positive_int()`: validates integer settings.
-- `resolve_relative_path()`: maps relative output folders to the repository root.
-- `load_config()`: loads and validates environment settings.
-- `Day3BenchmarkPipeline.load_source_frame()`: reads the PostgreSQL source table.
-- `Day3BenchmarkPipeline.build_source_sql()`: builds the source query.
-- `Day3BenchmarkPipeline.prepare_export_frame()`: copies the dataframe into a stable export frame.
-- `Day3BenchmarkPipeline.write_exports()`: writes CSV and Parquet files.
-- `Day3BenchmarkPipeline.run_benchmarks()`: runs the warmup and timed read tests.
-- `Day3BenchmarkPipeline.measure_reader()`: times one reader/file-format pair.
-- `Day3BenchmarkPipeline.build_report()`: assembles the JSON benchmark report.
-- `Day3BenchmarkPipeline.build_summary_rows()`: prepares the classroom comparison rows.
-- `Day3BenchmarkPipeline.write_report()`: writes the JSON report.
-- `Day3BenchmarkPipeline.print_summary_table()`: prints the console table.
-- `main()`: runs the pipeline from the command line.
-
-## 19. Class Map
-
-The Day 3 file uses three dataclasses and one pipeline class:
-
-- `Day3Config`: holds all configuration, paths, and connection settings.
-- `ReadBenchmarkResult`: stores the timing metrics for one reader and one file format.
-- `FileArtifact`: stores the file path and size metadata for an export.
-- `Day3BenchmarkPipeline`: owns the full export and benchmark workflow.
+That is the Day 3 lesson.

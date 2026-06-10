@@ -23,7 +23,9 @@ This lab is about sequencing and recovery:
 
 ## Files
 
-- `day4_orchestrated_workflow.py`: the orchestrated workflow entry point.
+- `lesson.py`: small teaching-first orchestration entrypoint.
+- `pipeline/`: focused modules for config, Prefect tasks, workflow retries, reports, scheduling, sabotage, and subprocesses.
+- `day4_orchestrated_workflow.py`: compatibility entrypoint for the original run command.
 - `README.md`: quickstart for the lab.
 - `DAY4_CODE_WALKTHROUGH.md`: step-by-step explanation of the orchestration logic.
 
@@ -42,6 +44,12 @@ python day4/day4_orchestrated_workflow.py
 ```
 
 This command runs the workflow once by default.
+
+For teaching, open the smaller entrypoint first:
+
+```bash
+python day4/lesson.py
+```
 
 ## Prefect Native Schedule (Every 24 Hours by Default)
 

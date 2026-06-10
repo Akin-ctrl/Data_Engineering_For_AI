@@ -21,7 +21,9 @@ This lab is designed to make the storage tradeoff obvious:
 
 ## Files
 
-- `day3_postgres_to_csv_parquet_benchmark.py`: the Day 3 pipeline script.
+- `lesson.py`: small teaching-first benchmark entrypoint.
+- `pipeline/`: focused modules for config, source loading, exports, benchmarks, reports, and logging.
+- `day3_postgres_to_csv_parquet_benchmark.py`: compatibility entrypoint for the original run command.
 - `DAY3_CODE_WALKTHROUGH.md`: beginner-friendly explanation of the script.
 - `day3_agent_query_views.sql`: SQL views and materialized views for agent-style querying.
 - `output/`: deterministic CSV, Parquet, and JSON benchmark artifacts.
@@ -46,13 +48,19 @@ pip install -r requirements.txt
 python day3/day3_postgres_to_csv_parquet_benchmark.py
 ```
 
+For teaching, open the smaller entrypoint first:
+
+```bash
+python day3/lesson.py
+```
+
 ## Default Source and Outputs
 
 By default, the script reads from `training_data.clean_papers` and writes these files:
 
 - `day3/output/day3_clean_papers_benchmark.csv`
 - `day3/output/day3_clean_papers_benchmark.parquet`
-- `day3/output/day3_clean_papers_benchmark_benchmark.json`
+- `day3/output/day3_clean_papers_benchmark.json`
 
 The files are overwritten deterministically on each run.
 
@@ -103,5 +111,3 @@ Recommended agent-first tables/views:
 - `training_data.v_agent_recent_papers`
 - `training_data.mv_agent_keyword_frequency`
 - `training_data.mv_agent_category_cooccurrence`
-
-
