@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from prefect import get_run_logger, task
 
+from day3.pipeline.provision import provision_views
 from day4.pipeline.config import Day4Config, TASK_RETRIES, TASK_RETRY_DELAY_SECONDS
 from day4.pipeline.constants import DAY2_SCRIPT, DAY3_SCRIPT, DAY3_VIEWS_SQL
 from day4.pipeline.models import WorkflowStepResult
@@ -35,35 +36,22 @@ def run_day2_pipeline(config: Day4Config) -> WorkflowStepResult:
 
 @task(name="Provision Day 3 views", retries=TASK_RETRIES, retry_delay_seconds=TASK_RETRY_DELAY_SECONDS)
 def provision_day3_views(config: Day4Config) -> WorkflowStepResult:
-    """Create the reusable Day 3 query views and materialized views."""
+    """Create the reusable Day 3 query views and materialized views.
+
+    This calls the same function Day 3 uses, so there is one copy of the
+    provisioning logic and no need for the psql client to be installed.
+    """
 
     logger = get_run_logger()
     started_at = datetime.now(timezone.utc).isoformat()
     maybe_trigger_sabotage("day3_views", config=config)
-    command = [
-        "psql",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-P",
-        "pager=off",
-        "-h",
-        config.pghost,
-        "-p",
-        str(config.pgport),
-        "-U",
-        config.pguser,
-        "-d",
-        config.pgdatabase,
-        "-f",
-        str(DAY3_VIEWS_SQL),
-    ]
-    run_subprocess(command, config=config, step_name="day3_views")
+    provision_views(config.sqlalchemy_url)
     finished_at = datetime.now(timezone.utc).isoformat()
     logger.info("Day 3 views provisioned")
     return WorkflowStepResult(
         name="day3_views",
         status="completed",
-        command=" ".join(command),
+        command=f"provision_views({DAY3_VIEWS_SQL.name})",
         started_at=started_at,
         finished_at=finished_at,
     )
