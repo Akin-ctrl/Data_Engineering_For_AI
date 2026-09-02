@@ -1,229 +1,198 @@
 # Day 2 Code Walkthrough
 
-Day 2 has been refactored so the first file you open in class is small and readable.
+The slower version of the Day 2 README. Open `day2/lesson.py` first, and go into `day2/pipeline/` only when you want to see how one step works.
 
-Start here:
+If you have not read the "Words You Will Need" section in [README.md](README.md), read that first. This file assumes you know what pagination, a watermark, and a child table are.
 
-- `day2/lesson.py`
+## The Shape Of The Day
 
-Use the files inside `day2/pipeline/` only when you want to explain one specific implementation detail.
-
-## Big Picture
-
-Day 2 teaches how a live API feed becomes clean, repeatable, database-backed training data.
+Same four moves as Day 1, with two new ones wedged in:
 
 ```text
-ArXiv API -> Atom/XML parser -> clean/reject split -> PostgreSQL -> watermark
+extract -> parse -> transform -> load -> remember where you stopped -> check
 ```
 
-The important learning idea is:
-
-> Live sources need pagination, validation, idempotent loading, and state.
-
-## What Changes From Day 1
-
-Day 1 used a static CSV.
-
-Day 2 adds:
-
-- a live API
-- XML parsing
-- pagination
-- repeated authors
-- a child table
-- retry/backoff behavior
-- a database watermark
-
-That is why Day 2 is more complex, but the pipeline shape is still familiar:
+Parsing is new because the data arrives as XML rather than rows. Remembering is new because the source keeps growing, so the pipeline has to know where it got to.
 
 ```text
-configure -> extract -> parse -> transform -> load -> check
+ArXiv API -> XML parser -> clean and rejected split -> PostgreSQL -> watermark
 ```
 
-## File Map
+The idea to hold on to:
 
-| File | What It Explains |
+> A pipeline reading a live source has to handle four things a file never makes you think about: getting results a page at a time, turning nested data into flat rows, loading in a way that survives being run twice, and remembering where it stopped.
+
+## What Changed Since Day 1
+
+Day 1 read a static CSV. Everything new in Day 2 comes from the source being alive:
+
+| Day 1 | Day 2 | Why it matters |
+|---|---|---|
+| One file, all at once | 100 papers per request | You need a loop, and you need to be polite about it |
+| Already a table | Nested XML | Something has to walk the structure and flatten it |
+| One row per record | Many authors per paper | Repeated values need a second table |
+| Same file every time | Source keeps growing | You need to remember where you stopped |
+| Run it again, same data | Pages overlap on purpose | Upserts stop the overlap becoming duplicates |
+
+The pipeline is more complicated, but the shape underneath is the one you already know.
+
+## Where Everything Lives
+
+| File | What It Does |
 |---|---|
-| `day2/lesson.py` | The complete pipeline flow in readable order. |
-| `day2/day2_arxiv_api_to_postgres.py` | Compatibility wrapper so the original run command still works. |
-| `day2/pipeline/constants.py` | Schema names, table names, XML namespaces, and default categories. |
-| `day2/pipeline/config.py` | Environment variables and typed runtime config. |
-| `day2/pipeline/logging_utils.py` | JSON logging setup. |
-| `day2/pipeline/extract.py` | ArXiv API requests, retries, and page fetching. |
-| `day2/pipeline/parse.py` | Atom/XML entry parsing and paper-record normalization. |
-| `day2/pipeline/transform.py` | Clean/rejected record splitting. |
-| `day2/pipeline/load.py` | PostgreSQL schema creation and upserts. |
-| `day2/pipeline/state.py` | Watermark read/write logic. |
-| `day2/pipeline/outputs.py` | Rejected sample CSV export. |
-| `day2/pipeline/checks.py` | Post-load quality checks. |
+| `day2/lesson.py` | The whole pipeline in readable order. |
+| `day2/day2_arxiv_api_to_postgres.py` | A second way to run the same pipeline. |
+| `day2/pipeline/constants.py` | Schema and table names, XML namespaces, default categories. |
+| `day2/pipeline/config.py` | Reads `.env` and checks the settings. |
+| `day2/pipeline/logging_utils.py` | Sets up the JSON log output. |
+| `day2/pipeline/extract.py` | Talks to the ArXiv API, handles retries and paging. |
+| `day2/pipeline/parse.py` | Turns XML entries into plain Python records. |
+| `day2/pipeline/transform.py` | Splits records into clean and rejected. |
+| `day2/pipeline/load.py` | Creates the tables and upserts the rows. |
+| `day2/pipeline/state.py` | Reads and writes the watermark. |
+| `day2/pipeline/outputs.py` | Writes the rejected sample CSV. |
+| `day2/pipeline/checks.py` | Runs the checks after loading. |
 
-## Walkthrough Order For Class
+## Going Through It In Class
 
-### 1. Open `day2/lesson.py`
+### 1. Start with `day2/lesson.py`
 
-Show the pipeline in this order:
+Read it end to end first. The order is the lesson:
 
 ```text
 load config
 create tables
-resolve ingestion window
-build ArXiv query
+work out which time window to fetch
+build the ArXiv query
 fetch pages
 split clean and rejected entries
 load raw, clean, authors, and rejected rows
-update watermark
-export rejected sample
+update the watermark
+export the rejected sample
 run checks
 ```
 
-Do not open every helper module yet.
+Notice that updating the watermark happens after loading, not before. If loading fails, the watermark does not move, and the next run tries the same window again. Getting that order wrong is how you silently lose data.
 
-### 2. Explain Configuration
+### 2. Configuration
 
 Open `day2/pipeline/config.py`.
 
-Students only need to understand:
+The database settings look like Day 1. What is new is everything controlling how the pipeline talks to the API: how many papers to fetch, how big each page is, how long to wait between requests, how long to wait before giving up on a slow response, and how many times to retry.
 
-- ArXiv settings come from `.env`
-- PostgreSQL settings come from `.env`
-- categories can build the search query automatically
-- request timeout/retry settings make live API calls safer
+All of it lives in `.env`, which means you can slow the pipeline down, speed it up, or point it at different categories without editing any code.
 
-The teaching point:
+> A pipeline that talks to a live service should be tunable without touching the code.
 
-> Live API pipelines should be configurable without changing code.
-
-### 3. Explain Extraction
+### 3. Extract
 
 Open `day2/pipeline/extract.py`.
 
-Focus on:
+Three functions to look at:
 
-- `build_search_query`
-- `request_feed_page`
-- `fetch_feed_page`
+- `build_search_query` turns your list of categories into the query string ArXiv expects.
+- `request_feed_page` makes one HTTP request, and retries with a growing delay if it fails.
+- `fetch_feed_page` wraps that up as "get me one page".
 
-The teaching point:
+The retry logic deserves a minute in class. Networks fail. A public API can be briefly busy. Code that assumes every request succeeds works fine on your laptop and falls over the first time it runs unattended. Retrying with a growing wait, rather than hammering immediately, is the normal answer.
 
-> Extraction handles network behavior: request parameters, retries, rate limits, and response parsing.
+> Extraction owns the network: request shape, retries, rate limits, and getting the response back.
 
-### 4. Explain Parsing
+### 4. Parse
 
-Open `day2/pipeline/parse.py`.
+Open `day2/pipeline/parse.py`. This part has no equivalent in Day 1.
 
-Focus on:
+The API hands back XML with entries nested inside a feed, and things like authors and categories repeated inside each entry. This module walks that structure and produces a plain Python dictionary per paper.
 
-- `normalize_arxiv_id`
-- `entry_element_to_record`
-- author extraction
-- category extraction
+Look at:
 
-The teaching point:
+- `normalize_arxiv_id`, which strips the version suffix so `2603.05743v2` and `2603.05743v1` are recognised as the same paper.
+- `entry_element_to_record`, which pulls out the fields we care about.
+- The author and category extraction, which handle the repeated elements.
 
-> Parsing converts source-specific XML into normal Python records the rest of the pipeline can understand.
+> Parsing turns source-shaped data into ordinary Python the rest of the pipeline can work with. Nothing downstream should have to know the source was XML.
 
-### 5. Explain Transformation
+### 5. Transform
 
 Open `day2/pipeline/transform.py`.
 
-Focus on:
+Shorter than Day 1's, because most of the messy work already happened in parsing. It rejects an entry when the paper id, title, summary, published date, primary category, or author list is missing.
 
-- missing paper ids
-- missing title/summary
-- missing timestamps
-- missing primary category
-- missing authors
+These are not arbitrary. Day 5 turns `summary` into training examples, so a paper without one is worthless three days from now. Rejecting it here, with a reason, is much better than finding out later.
 
-The teaching point:
+> Validation decides which records are safe enough to keep.
 
-> Validation decides which records are safe enough for the clean table.
+### 6. Load
 
-### 6. Explain Loading
+Open `day2/pipeline/load.py`. Do not read the SQL line by line in class.
 
-Open `day2/pipeline/load.py`.
+Four destinations:
 
-Do not explain every SQL column line-by-line.
-
-Focus on the four destinations:
-
-- raw ArXiv entries
+- raw entries, as they arrived
 - clean papers
-- paper authors
-- rejected entries
+- paper authors, one row per author
+- rejected entries, with reasons
 
-The teaching point:
+The authors table is the interesting one. One paper, many authors, so it cannot be one row. The child table has a paper key pointing back at the paper, and that is how a nested structure becomes something you can query. This is the same move you make any time source data repeats.
 
-> Nested source data often becomes multiple relational tables.
+> Nested source data usually becomes more than one table.
 
-### 7. Explain State
+### 7. State
 
-Open `day2/pipeline/state.py`.
+Open `day2/pipeline/state.py`. This is the part that makes the pipeline repeatable.
 
-Focus on:
+- `resolve_ingestion_window` decides which time range to fetch. First run, it goes back the default number of days. After that, it starts from the stored watermark, minus a small overlap.
+- `update_state_from_latest_entry` writes the new position after a successful load.
 
-- `resolve_ingestion_window`
-- `update_state_from_latest_entry`
+The overlap looks wasteful and is not. Papers do not always show up in perfect time order, so re-reading the last ten minutes means you do not miss a late arrival. The upserts make those repeated rows harmless.
 
-The teaching point:
+> Anything that runs repeatedly against a growing source has to remember where it stopped.
 
-> A pipeline that runs repeatedly needs to remember where it stopped.
-
-### 8. Explain Checks
+### 8. Check
 
 Open `day2/pipeline/checks.py`.
 
-Focus on:
+Counts the rows in each table, looks for nulls where there should not be any, and checks the author table has no duplicate keys.
 
-- raw row count
-- clean row count
-- author row count
-- rejected row count
-- null violations
-- duplicate author keys
+That last one is a real trap. Load authors twice without a proper key and you get every author listed twice, and every count that depends on authors quietly becomes wrong.
 
-The teaching point:
+> Prove the load worked before trusting anything downstream.
 
-> The pipeline should prove that the load worked before we trust the output.
+## What To Skip The First Time
 
-## What To Skip On First Pass
+Leave these until someone asks:
 
-Skip these until learners ask:
-
-- full XML namespace details
-- every SQL DDL line
-- every retry/backoff branch
-- every field in the raw payload
+- the XML namespace details
+- every line of the table definitions
+- every branch of the retry logic
+- every field kept in the raw payload
 - every environment variable
-- every logging context field
+- every field in the log output
 
-Those details are useful after students understand the main pipeline shape.
+They matter, but not before the overall shape makes sense.
 
-## Common Student Questions
+## Questions Students Ask
 
-### Why does Day 2 need a watermark?
+### Why does Day 2 need a watermark and Day 1 did not?
 
-Because the source is live. If the pipeline runs tomorrow, it should know where the previous run ended.
+Because Day 1's file does not change. ArXiv gets new papers every day, so without a watermark every run would start from the beginning and redo work it has already done.
 
-### Why store authors separately?
+### Why put authors in a separate table?
 
-Because one paper can have many authors. A child table models that repeated relationship cleanly.
+Because one paper has many authors. Cramming them into one column means you can never cleanly ask "how many papers has this person written".
 
-### Why keep raw entries?
+### Why keep the raw entries?
 
-Because raw entries let us audit, replay, and debug the parser later.
+So you can fix a parser bug and re-parse without going back to the API. Given the API takes 15 minutes to walk, that is worth the disk space.
 
-### Why still keep rejected records?
+### Why keep the rejected records?
 
-Because rejected records show whether the source is incomplete or whether our validation rules are too strict.
+Because they tell you whether the source is incomplete or your rules are too strict. You cannot tell those apart without looking.
 
-### Why use upserts?
+### Why upserts again?
 
-Because API pages can overlap across runs. Upserts make repeated ingestion safer.
+Because pages overlap between runs on purpose. Without upserts that overlap would become duplicate rows every single run.
 
-## Instructor Script
+## The Short Version
 
-Use this short explanation:
-
-> Day 2 takes a live ArXiv feed and treats it like a production source. We query it in pages, parse the XML, normalize each paper, split valid and invalid records, write papers and authors into PostgreSQL, and store a watermark so the next run knows where to continue.
-
-That is the Day 2 lesson.
+> Day 2 takes a live ArXiv feed and treats it like a production source. We ask for it a page at a time, parse the XML into plain records, normalise each paper, split the valid from the invalid, write papers and authors into separate tables, and store a watermark so tomorrow's run knows where to carry on from.

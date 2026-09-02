@@ -1,32 +1,40 @@
 # Day 1 Code Walkthrough
 
-Day 1 has been refactored so the first file you open in class is small and readable.
+This is the slower version of the Day 1 README. It goes through the code one piece at a time.
 
-Start here:
+Open `day1/lesson.py` first. Only open the files in `day1/pipeline/` when you want to see how one particular step works.
 
-- `day1/lesson.py`
+## The Shape Of The Day
 
-Use the files inside `day1/pipeline/` only when you want to explain one specific implementation detail.
-
-## Big Picture
-
-Day 1 teaches one complete data engineering pattern:
+Almost every data pipeline you will ever build has the same four moves:
 
 ```text
-CSV source -> read with pandas -> clean/reject split -> PostgreSQL -> quality checks
+extract -> transform -> load -> check
 ```
 
-The important learning idea is:
+Extract means get the data. Transform means fix it and decide what you trust. Load means put it somewhere it will stay. Check means prove the load actually worked instead of assuming it did.
 
-> Clean data and rejected data should both be stored deliberately.
+For Day 1 those four look like this:
 
-Bad rows should not silently disappear, and they should not pollute the clean table.
+```text
+CSV on the internet -> read with pandas -> split into clean and rejected -> PostgreSQL -> quality checks
+```
 
-## The Teaching Entry Point
+The one idea to hold on to:
 
-`day1/lesson.py` is the classroom entrypoint.
+> Clean rows and rejected rows both get stored, on purpose.
 
-The main function is intentionally short:
+Bad rows should not vanish silently, and they should not be allowed to sit in the clean table pretending to be fine. They go in a table of their own, with a note saying what was wrong with them.
+
+## Two Words You Will See A Lot
+
+**Upsert.** Short for "update or insert". You hand the database a row, and it either adds it or, if a row with that key is already there, updates the existing one. This is what lets you run the pipeline twice without ending up with two copies of everything. Running something twice and getting the same result is called being idempotent, and it is a property you want in almost every pipeline you build.
+
+**Row hash.** A short fingerprint calculated from the contents of a row. Two rows with the same values produce the same fingerprint, and changing any value changes the fingerprint. It gives every row a stable identity even when the source file has no ID column, which is how we spot the same row arriving twice.
+
+## The Entry Point
+
+`day1/lesson.py` is the file to read in class. The main function is deliberately short, and it reads as a list of steps:
 
 ```text
 load config
@@ -40,152 +48,118 @@ export rejected sample
 run checks
 ```
 
-That is the whole Day 1 story.
+That is the whole day. Everything else is detail.
 
-## File Map
+## Where Everything Lives
 
-| File | What It Explains |
+| File | What It Does |
 |---|---|
-| `day1/lesson.py` | The complete pipeline flow in readable order. |
-| `day1/day1_hf_csv_to_postgres.py` | Compatibility wrapper so the original run command still works. |
-| `day1/pipeline/config.py` | Environment variables and typed runtime config. |
-| `day1/pipeline/logging_utils.py` | JSON logging setup. |
-| `day1/pipeline/extract.py` | Hugging Face URL resolution, download, and CSV reading. |
-| `day1/pipeline/transform.py` | Column cleanup, row hashing, validation, and rejected-row logic. |
-| `day1/pipeline/load.py` | PostgreSQL schema creation and upserts. |
-| `day1/pipeline/outputs.py` | Rejected sample CSV export. |
-| `day1/pipeline/checks.py` | Post-load quality checks. |
+| `day1/lesson.py` | The whole pipeline in readable order. |
+| `day1/day1_hf_csv_to_postgres.py` | A second way to run the same pipeline. |
+| `day1/pipeline/config.py` | Reads `.env` and checks the settings are there. |
+| `day1/pipeline/constants.py` | The schema and table names, in one place. |
+| `day1/pipeline/logging_utils.py` | Sets up the JSON log output. |
+| `day1/pipeline/extract.py` | Works out the download URL, downloads the file, reads it. |
+| `day1/pipeline/transform.py` | Tidies columns, hashes rows, decides what is rejected. |
+| `day1/pipeline/load.py` | Creates the tables and upserts the rows. |
+| `day1/pipeline/outputs.py` | Writes the rejected sample CSV. |
+| `day1/pipeline/checks.py` | Runs the checks after loading. |
 
-## Walkthrough Order For Class
+## Going Through It In Class
 
-### 1. Open `day1/lesson.py`
+### 1. Start with `day1/lesson.py`
 
-Show learners that a pipeline is an ordered story:
+Read it top to bottom without opening anything else. The point is that a pipeline is a story with an order, and you should be able to follow that order before you look at any of the machinery.
 
-```text
-extract -> transform -> load -> check
-```
-
-Do not open the helper modules yet.
-
-### 2. Explain Configuration
+### 2. Configuration
 
 Open `day1/pipeline/config.py`.
 
-Students only need to understand:
+Three things matter here:
 
-- values come from `.env`
-- required values are checked early
-- the database connection string is built from config
+- The settings come from the `.env` file, not from inside the code.
+- If a required setting is missing, the pipeline stops immediately with a message saying which one.
+- The database connection string is assembled from those settings.
 
-The teaching point:
+That second point is worth pausing on. Failing at the start with "you forgot PGPASSWORD" is much kinder than failing forty seconds later with a connection error that does not say what is wrong.
 
-> Runtime settings should not be hard-coded inside pipeline logic.
+> Settings do not belong inside pipeline logic.
 
-### 3. Explain Extraction
+### 3. Extract
 
 Open `day1/pipeline/extract.py`.
 
-Students only need to understand:
+- It works out the real download URL for the HuggingFace file.
+- It downloads the CSV into `day1/output/`.
+- It reads that file with pandas.
 
-- the Hugging Face URL is resolved
-- the CSV is downloaded into `day1/output/`
-- pandas reads the file defensively
+Notice what it does not do. It does not clean anything and it does not touch the database. Extract has one job.
 
-The teaching point:
+> Extract gets data into memory. It does not clean it and it does not load it.
 
-> Extract code gets data into memory; it should not clean or load it.
+### 4. Transform
 
-### 4. Explain Transformation
+Open `day1/pipeline/transform.py`. This is the heart of Day 1.
 
-Open `day1/pipeline/transform.py`.
+Four functions to look at:
 
-Focus on:
+- `normalize_column_name` turns `Positive Feedback Count` into `positive_feedback_count`. Spaces and capital letters in column names cause trouble in SQL, so we get rid of them once, at the start.
+- `stable_row_hash` builds the fingerprint described above.
+- `prepare_raw_records_for_load` gets rows ready for the raw table, before any judgement is applied.
+- `clean_dataset_defensively` is where every row is checked and sorted into clean or rejected.
 
-- `normalize_column_name`
-- `stable_row_hash`
-- `prepare_raw_records_for_load`
-- `clean_dataset_defensively`
+Read `clean_dataset_defensively` slowly. Each rule is a few lines, and each failure appends a reason like `rating_out_of_range_1_to_5` to a list. A row can collect several reasons, and all of them get stored, because "this row is bad" is much less useful six months later than "this row is bad for these three reasons".
 
-The teaching point:
+> Transformation is where you decide what is acceptable, what is not, and why.
 
-> Transformation is where we decide what is acceptable, what is rejected, and why.
-
-### 5. Explain Loading
+### 5. Load
 
 Open `day1/pipeline/load.py`.
 
-Do not explain every SQL column line-by-line.
+Rows go to three places:
 
-Focus on the three destinations:
+- the raw table, exactly as they arrived
+- the clean table, if they passed everything
+- the rejected table, with their reasons, if they did not
 
-- raw table
-- clean table
-- rejected table
+All three use upserts, so running the pipeline again updates rows instead of duplicating them.
 
-The teaching point:
+Keeping the raw table costs disk space and buys you the ability to change your mind. If you decide next week that age 12 should be allowed after all, you can rebuild the clean table from raw without downloading anything.
 
-> A good pipeline preserves traceability: original rows, accepted rows, and rejected rows.
+> A good pipeline keeps the original rows, the accepted rows, and the rejected rows.
 
-### 6. Explain Checks
+### 6. Check
 
 Open `day1/pipeline/checks.py`.
 
-Focus on:
+After loading, it counts rows, looks for nulls where there should not be any, looks for duplicate keys, and prints how the ratings are distributed.
 
-- row counts
-- null checks
-- duplicate checks
-- rating distribution sample
+This step exists because writing to a database and writing the right thing to a database are different events. A pipeline that finishes without error can still have loaded nothing at all.
 
-The teaching point:
+> A pipeline is not done when it writes data. It is done when it proves the write worked.
 
-> A pipeline is not finished when it writes data. It is finished when it proves the write worked.
+## Questions Students Ask
 
-## What To Skip On First Pass
+### Why keep the raw rows?
 
-Skip these until learners ask:
+So you can answer questions later. Clean data on its own cannot tell you what you threw away or why. Raw rows let you audit, replay, and debug.
 
-- detailed SQL DDL
-- logger internals
-- exact JSON log shape
-- every field in `PipelineConfig`
-- every branch in the reject logic
+### Why keep the rejected rows?
 
-Those details matter, but they are second-pass material.
+Because they are evidence. A big pile of rejects means one of three things: the source data is broken, your rules are too strict, or your pipeline has a bug. You cannot tell which without looking at them.
 
-## Common Student Questions
+### Why bother with row hashes?
 
-### Why keep raw rows?
+They give each row a stable identity even when the file has no ID column. That is what makes deduplication and repeat runs possible.
 
-Because clean data alone cannot explain what happened. Raw rows let us audit, replay, and debug.
+### Why upserts instead of plain inserts?
 
-### Why keep rejected rows?
+So you can run the script twice without doubling your data. That sounds minor until the first time a run half fails and you need to run it again.
 
-Because rejected rows are evidence. They tell us whether the source data is broken, the validation rules are too strict, or the pipeline needs improvement.
+### Why split this into so many small files?
 
-### Why use row hashes?
+Because each file now has one job: config, extract, transform, load, output, check. When something breaks, the file name tells you where to look.
 
-Hashes give us stable row identities. That helps with deduplication and repeatable loads.
+## The Short Version
 
-### Why use upserts?
-
-Upserts let the script run more than once without blindly duplicating data.
-
-### Why split the code into modules?
-
-Because each module now has one teaching responsibility:
-
-```text
-config, extract, transform, load, output, check
-```
-
-That makes the repo easier to explain and easier to debug.
-
-## Instructor Script
-
-Use this short explanation:
-
-> Day 1 takes a public CSV and treats it like production data. We do not trust it blindly. We download it, read it carefully, preserve the raw version, validate each row, send good rows to a clean table, send bad rows to a rejected table, and then run checks to prove the load worked.
-
-That is the Day 1 lesson.
+> Day 1 takes a public CSV and treats it like production data. We do not trust it. We download it, read it carefully, keep the original, check every row, send the good rows to a clean table and the bad rows to a rejected table with their reasons, and then run checks to prove the load actually worked.

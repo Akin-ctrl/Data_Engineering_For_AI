@@ -1,140 +1,87 @@
-# Data Engineering for AI (2-Week Module)
+# Data Engineering for AI
 
-## Overview
+This repository holds the lab work for the Data Engineering module of a 10 week programme that leads into Agentic AI. This module is 2 weeks of it, and it covers the data foundations you need before building anything that relies on data being right.
 
-This repository contains the lab materials for the **Data Engineering** module of a **10-week training program leading to Agentic AI**.
+## What This Module Is About
 
-The full program spans 10 weeks, and this module covers **2 weeks** focused on the data foundations required before building reliable AI and agentic systems.
+Every AI system is downstream of some data. If that data is wrong, incomplete, or quietly different from what you thought it was, nothing you build on top of it will save you. This module is about making data trustworthy, and about knowing when it is not.
 
-This repo is designed to support:
+By the end of it you should be able to:
 
-- Guided lab sessions during class.
-- Learner self-practice after class.
-- Reference corrections when learners need to verify their approach.
+- Explain why data engineering decides whether an AI system works.
+- Build a pipeline that pulls data in, cleans it, and stores it.
+- Spot the ways data goes wrong, and handle them on purpose rather than by accident.
+- Produce clean, structured datasets that something downstream can actually use.
 
-## Module Position in the 10-Week Program
+## How The Week Fits Together
 
-- Total training duration: 10 weeks.
-- This module duration: 2 weeks.
-- Purpose of this module: build practical data engineering skills that feed directly into later Agentic AI topics.
+The five days build on each other. Each one adds a problem the previous day did not have.
 
-## Learning Objectives (2 Weeks)
+| Day | What you build | The new problem |
+|---|---|---|
+| 1 | Download a CSV, clean it, load it into PostgreSQL | Data arrives broken, and you have to decide what to do with the broken parts |
+| 2 | Pull papers from a live API into PostgreSQL | The source keeps changing, comes in pages, and is nested rather than tabular |
+| 3 | Export to CSV and Parquet, and measure the difference | File formats are not interchangeable, and the reason is not what most people assume |
+| 4 | Run Days 2 and 3 as one workflow with retries | Things fail, and something has to handle that when you are not watching |
+| 5 | Turn the text into instruction-tuning data | Training data still needs structure, validation, and reproducibility |
 
-By the end of this module, learners should be able to:
+Days 2 to 5 form one connected pipeline and share a database schema. Day 1 stands alone.
 
-- Explain the role of data engineering in AI/Agentic AI systems.
-- Build and reason about basic ingestion and transformation workflows.
-- Identify and fix common data quality issues.
-- Produce clean, structured, reusable datasets for downstream AI tasks.
+## Getting Set Up
 
-## Repository Purpose
+If your machine is not ready yet, start here:
 
-This repository hosts lab work so learners can:
+- [STUDENT_ONBOARDING.md](STUDENT_ONBOARDING.md) covers Python, Git, VS Code, Docker, and getting the database running.
+- [WSL_Docker_Portainer_Setup.md](WSL_Docker_Portainer_Setup.md) is for Windows machines using Ubuntu under WSL2.
 
-- Follow step-by-step exercises in class.
-- Revisit lab instructions after class.
-- Compare with correction/reference solutions when needed.
+Once that is done, every lab needs the same two things: the database running (`docker compose up -d`) and your `.env` file filled in.
 
-Use this repo as a practical companion to the live sessions, not as a replacement for active lab work.
+## The Labs
 
-## Local Setup
+Each day has a README with the quickstart and a walkthrough with the slower explanation. Start with the README.
 
-If you are preparing a Windows machine with Ubuntu in WSL2, start here before running any Docker-based labs:
+**[Day 1](day1/README.md)** ([walkthrough](day1/DAY1_CODE_WALKTHROUGH.md)). Download a CSV of clothing reviews, check every row, load the good ones into PostgreSQL and keep the bad ones with a note saying what was wrong.
 
-- [WSL Docker and Portainer setup](WSL_Docker_Portainer_Setup.md)
+**[Day 2](day2/README.md)** ([walkthrough](day2/DAY2_CODE_WALKTHROUGH.md)). Pull research papers from the ArXiv API, a page at a time, parse the XML, split authors into their own table, and remember where you stopped so tomorrow's run carries on.
 
-## Day 1 Lab Entry Point
+**[Day 3](day3/README.md)** ([walkthrough](day3/DAY3_CODE_WALKTHROUGH.md)). Export the clean papers to CSV and Parquet, create SQL views inside the database, and time how long each format takes to read back. The answer is more interesting than expected.
 
-The first practical lab is ready and focused on the foundational data engineering flow:
+**[Day 4](day4/README.md)** ([walkthrough](day4/DAY4_CODE_WALKTHROUGH.md)). Run Day 2 and Day 3 as a single workflow with retries, then break a step on purpose and watch it recover.
 
-- Download raw CSV from HuggingFace.
-- Load into pandas memory.
-- Clean data defensively.
-- Upsert safe records into PostgreSQL.
-- Persist rejected rows for review.
+**[Day 5](day5/README.md)** ([walkthrough](day5/DAY5_CODE_WALKTHROUGH.md)). Turn the paper text into instruction-tuning examples, validate every one, split them repeatably, and write the files with a manifest.
 
-Start here:
+## How To Use This Repository
 
-- `day1/README.md`
-- `day1/day1_hf_csv_to_postgres.py`
-- `.env.example`
-- `docker-compose.yml`
+Try the exercise yourself before reading the reference code. That order matters more than it sounds. Reading a working solution feels like understanding, and it usually is not.
 
-## Day 2 Lab Entry Point
+1. Read the lab instructions.
+2. Attempt it on your own.
+3. Check your output against the checks the lab describes.
+4. Only then read the reference code here.
+5. Write down where yours differed and why.
 
-The second practical lab moves from a static CSV to a live public API:
+## Running The Tests
 
-- Query ArXiv for cs.LG papers.
-- Paginate through the Atom feed with a simple persisted watermark.
-- Flatten repeated authors into a normalized child table.
-- Load raw, clean, and rejected records idempotently into PostgreSQL.
+There is a small test suite covering the parts that are easy to get subtly wrong: column name cleanup, row hashing, the clean and rejected split, chunking, and the train and validation split.
 
-Start here:
+```bash
+pytest tests/ -q
+```
 
-- `day2/README.md`
-- `day2/day2_arxiv_api_to_postgres.py`
+Worth running, and worth reading. Tests are also documentation of what the code is supposed to do.
 
-## Day 3 Lab Entry Point
+## Timing
 
-The third practical lab turns the clean PostgreSQL data into file formats that are easy to compare:
+Day 2 takes 12 to 15 minutes for a full run, because it waits 5 seconds between API requests to be polite to a free public service. Day 4 runs Day 2, so it takes about as long.
 
-- Query the Day 2 clean table from PostgreSQL.
-- Export the same data to CSV and Parquet.
-- Measure read speed with pandas and PyArrow.
-- Compare file sizes and produce an "aha" benchmark report.
+For a quick run while you are working on something else, cap the paper count:
 
-Start here:
+```bash
+ARXIV_MAX_PAPERS=300 python day2/lesson.py
+```
 
-- [day3/README.md](day3/README.md)
-- [day3/day3_postgres_to_csv_parquet_benchmark.py](day3/day3_postgres_to_csv_parquet_benchmark.py)
+Days 1, 3 and 5 are all under a minute.
 
-## Day 4 Lab Entry Point
+## What Comes Next
 
-The fourth practical lab wraps the Day 2 and Day 3 code into one orchestrated workflow with retries:
-
-- Run the API extract first.
-- Load PostgreSQL second.
-- Provision the Day 3 query views.
-- Generate the CSV and Parquet benchmark outputs last.
-- Inject a controlled failure and watch the retry behavior recover.
-
-Start here:
-
-- [day4/README.md](day4/README.md)
-- [day4/day4_orchestrated_workflow.py](day4/day4_orchestrated_workflow.py)
-
-## Day 5 Lab Entry Point
-
-The fifth practical lab transforms the cleaned text corpus into instruction-tuning payloads:
-
-- Read clean paper text from PostgreSQL.
-- Chunk with sentence-based windows and overlap.
-- Generate strict instruction/input/output pairs.
-- Export deterministic train/validation payload files in Alpaca and chat formats.
-- Write a manifest with run and validation metadata.
-
-Start here:
-
-- [day5/README.md](day5/README.md)
-- [day5/day5_build_instruction_payload.py](day5/day5_build_instruction_payload.py)
-
-## How Learners Should Use This Repo
-
-1. Start from the lab instructions first.
-2. Attempt the exercise independently.
-3. Validate your output against expected checks.
-4. Only then consult correction/reference material.
-5. Document what you learned from differences.
-
-## Expectations for Lab Corrections
-
-Correction/reference materials should:
-
-- Show one clear and reproducible approach.
-- Explain key design choices briefly.
-- Include basic validation logic where relevant.
-- Stay aligned with concepts taught in class.
-
-## Next Step in the 10-Week Journey
-
-After this 2-week Data Engineering module, learners continue into the remaining weeks toward Agentic AI with stronger data fundamentals and better pipeline thinking.
+After these 2 weeks the programme moves on toward Agentic AI. The habits from this module carry over directly. An agent making decisions from bad data makes bad decisions faster than anything else you will build.

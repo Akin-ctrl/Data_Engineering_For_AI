@@ -1,95 +1,95 @@
-# Day 2 Lab: ArXiv API to PostgreSQL (Live Pagination Pipeline)
+# Day 2 Lab: ArXiv API to PostgreSQL
 
-## Goal
+## What You Are Building
 
-Pull papers from the live ArXiv API across multiple AI-related categories, page through the Atom feed, flatten each entry into an analytical paper record, and load the result into PostgreSQL with idempotent upserts.
+Day 1 read a file. A file sits still. You can download it, look at it, and download it again tomorrow and get the same thing.
 
-What makes this lab different from Day 1:
+Day 2 reads a live API instead, and everything that is harder about live sources shows up at once. The data keeps growing. It comes back a page at a time, so you have to keep asking for more. It arrives as XML rather than a neat table. One paper has many authors, which does not fit in a single row. And when you run the pipeline again tomorrow, you need it to pick up where it stopped rather than starting from the beginning.
 
-- The source is a live API, not a static file.
-- The API returns Atom/XML, so the script parses nested feed entries before flattening them.
-- Authors are normalized into a separate child table.
-- Pagination state is stored in PostgreSQL with a simple watermark table.
-- The script sleeps between requests to stay polite to the public API.
+You are pulling research papers from ArXiv across several AI categories, pulling them apart, and loading them into PostgreSQL in a way you can safely repeat.
 
-## What This Day Covers
+## Words You Will Need
 
-- Requesting live data from ArXiv.
-- Reading and flattening nested feed entries.
-- Normalizing repeated authors into a separate table.
-- Using pagination with a persisted watermark.
-- Writing raw, clean, and rejected rows idempotently to PostgreSQL.
-- Running post-load checks so learners can verify the pipeline worked.
+**API.** A way for one program to ask another program for data over the network. Instead of downloading a file, you send a request and get an answer back.
 
-## Files
+**Pagination.** The API will not hand you 10,000 papers at once. It gives you 100, and tells you there are more. Pagination is the loop that keeps asking for the next batch until you have what you need.
 
-- `lesson.py`: small teaching-first pipeline entrypoint.
-- `pipeline/`: focused modules for config, extraction, parsing, transform, load, state, checks, and outputs.
-- `day2_arxiv_api_to_postgres.py`: compatibility entrypoint for the original run command.
-- `DAY2_CODE_WALKTHROUGH.md`: beginner-friendly explanation of the script.
-- `output/`: rejected sample output and any teaching artifacts created by the pipeline.
+**Atom and XML.** ArXiv answers in XML, a text format that nests things inside other things, a bit like folders inside folders. Atom is a particular flavour of XML used for feeds. It is not a table, so you cannot hand it straight to pandas. You have to walk the structure and pull out the parts you want.
 
-## Required Setup
+**Watermark.** A note the pipeline writes to itself saying "I got this far". Next run it reads that note and starts from there. Without it, every run would download everything again from the beginning.
 
-1. Copy `.env.example` to `.env`.
-2. Update the PostgreSQL values if needed.
-3. Start PostgreSQL with Docker Compose.
-4. Install Python dependencies.
+**Child table.** A paper can have one author or forty. You cannot put forty authors in one column and still query them sensibly, so authors go in their own table with a column pointing back at the paper they belong to. That second table is the child table.
 
-## Start PostgreSQL
+**Idempotent.** A run you can repeat without damage. Running it twice leaves the database in the same state as running it once. Day 1 got this from upserts, and Day 2 needs it even more, because pages overlap between runs on purpose.
+
+## Before You Start
+
+You need PostgreSQL running and your packages installed. If you have not set the machine up, do that in [STUDENT_ONBOARDING.md](../STUDENT_ONBOARDING.md) first.
+
+Then:
 
 ```bash
 docker compose up -d
 ```
 
-## Install Dependencies
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Run the Day 2 Pipeline
-
-```bash
-python day2/day2_arxiv_api_to_postgres.py
-```
-
-For teaching, open the smaller entrypoint first:
+## Run It
 
 ```bash
 python day2/lesson.py
 ```
 
-## Target Database Objects
+Be aware that a full run is slow on purpose. ArXiv is a free public service, and hammering it is rude, so the pipeline waits 5 seconds between pages. Fetching 10,000 papers means roughly 100 pages, so expect somewhere around 12 to 15 minutes. That waiting is not a bug and it is worth pointing at in class.
 
-Schema and tables created automatically in `training_data`:
+If you just want to see it work without the wait, set a smaller limit for one run:
 
-- `training_data.raw_arxiv_entries`
-- `training_data.clean_papers`
-- `training_data.paper_authors`
-- `training_data.rejected_arxiv_entries`
-- `training_data.pipeline_state`
+```bash
+ARXIV_MAX_PAPERS=300 python day2/lesson.py
+```
 
-## Defensive Rules Implemented
+The same pipeline also runs from here:
 
-- Reject entries with missing paper id, title, summary, published date, or authors.
-- Normalize the ArXiv id so idempotency survives repeated runs and feed overlap.
-- Store the repeated author list in a normalized child table.
-- Keep the original nested entry payload for traceability.
-- Upsert raw, clean, author, rejected, and state records.
+```bash
+python day2/day2_arxiv_api_to_postgres.py
+```
 
-## Outputs You Should Inspect
+## What The Files Are
 
-- JSON logs in the console.
+- `lesson.py`: the short version. Read this first.
+- `pipeline/`: the work, split into config, extract, parse, transform, load, state, checks, and outputs.
+- `day2_arxiv_api_to_postgres.py`: a second way to run the same pipeline.
+- `DAY2_CODE_WALKTHROUGH.md`: the slower explanation.
+- `output/`: rejected sample files.
+
+## What Ends Up In The Database
+
+Everything goes into the `training_data` schema, which Days 3, 4 and 5 all read from as well.
+
+- `training_data.raw_arxiv_entries`: each entry as it arrived, before judgement.
+- `training_data.clean_papers`: the papers that passed every check. This is the table the rest of the week is built on.
+- `training_data.paper_authors`: one row per author per paper.
+- `training_data.rejected_arxiv_entries`: entries that failed, with reasons.
+- `training_data.pipeline_state`: the watermark, so the next run knows where to resume.
+
+## The Checks The Pipeline Runs
+
+An entry is rejected if it is missing any of: the paper id, the title, the summary, the published date, or the authors. A paper with no summary is useless to Day 5, so it is better to catch it here than to discover it three days later.
+
+Two other things happen that are worth understanding:
+
+The ArXiv id gets normalised. ArXiv hands out ids with version numbers on the end, like `2603.05743v2`. If you treated `v1` and `v2` as different papers you would load the same work twice. The pipeline strips the version so a paper keeps one identity across runs.
+
+The original nested entry is kept in full. Same reason as Day 1. If the parser turns out to have a bug, you can fix it and re-parse without going back to the API.
+
+## What To Look At Afterwards
+
+- The JSON logs, especially the final counts of raw, clean, author and rejected rows.
 - `day2/output/rejected_sample_<batch_id>.csv`.
-- PostgreSQL row counts in raw, clean, authors, rejected, and state tables.
-- The persisted watermark in `training_data.pipeline_state`.
+- The row counts in all five tables.
+- The watermark sitting in `training_data.pipeline_state`. Run the pipeline twice and watch it move.
 
-## Recommended Day 2 Config (10k+ Papers)
+## Settings For A Full Corpus
 
-Use these values in `.env` to build a deeper training corpus:
+These are the values that build a corpus deep enough for Days 3 to 5. They go in your `.env`:
 
 ```env
 ARXIV_CATEGORIES=cs.LG,cs.AI,cs.CV,cs.CL,stat.ML,cs.RO,cs.IR,cs.CR
@@ -106,10 +106,12 @@ ARXIV_RETRY_BACKOFF_SECONDS=5
 ARXIV_USER_AGENT=DataEngineeringForAI-Day2/1.0 (contact: instructor@example.com)
 ```
 
-When `ARXIV_SEARCH_QUERY` is blank, the script automatically builds a multi-category query from `ARXIV_CATEGORIES`.
+Leave `ARXIV_SEARCH_QUERY` blank and the pipeline builds the query for you from the category list.
 
-## Notes for Teaching
+`ARXIV_OVERLAP_MINUTES=10` is worth explaining. When the pipeline resumes, it deliberately goes back ten minutes before the watermark and re-reads that window. It sounds wasteful, but papers do not always appear in a tidy order, and a small overlap means you do not miss one that arrived late. The upserts make the repeated rows harmless.
 
-- The ArXiv feed is Atom/XML, so this lab teaches how to work with live structured feeds rather than files.
-- The pagination watermark is intentionally simple: it uses the latest published timestamp plus a small overlap window.
-- Later lessons can refactor this into a multi-module package or a reusable CLI.
+## A Note For Teaching
+
+Day 1 was a file. Day 2 is a feed, and it introduces the four problems that come with live sources: paging, parsing nested data, storing repeated values, and remembering where you stopped.
+
+The watermark here is deliberately the simplest thing that works: the newest published timestamp, minus a small overlap. Real systems get more careful than this, but the idea is the same, and starting simple is what makes it explainable.

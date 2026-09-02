@@ -1,5 +1,5 @@
 # Student Onboarding Guide
-## Data Engineering for AI — Module Setup
+## Data Engineering for AI: Module Setup
 
 This guide walks you through every installation step needed to run this module from scratch.  
 **Assumed starting point:** A Windows computer with only a browser installed.
@@ -10,7 +10,7 @@ This guide walks you through every installation step needed to run this module f
 
 | Component | Technology | Why You Need It |
 |---|---|---|
-| **Runtime** | Python 3.11 | Runs all pipeline scripts |
+| **Runtime** | Python 3.11 or newer | Runs all pipeline scripts |
 | **Editor** | VS Code | Where you read and run the code |
 | **Version Control** | Git | Clone the repository to your machine |
 | **Database** | PostgreSQL 16 via Docker Compose | Stores raw, clean, and rejected records |
@@ -18,32 +18,32 @@ This guide walks you through every installation step needed to run this module f
 | **ORM / Query Layer** | SQLAlchemy + psycopg | Python talks to PostgreSQL through these |
 | **Environment Config** | python-dotenv (.env file) | Keeps credentials out of your code |
 | **Data Libraries** | pandas, pyarrow, requests | Load, transform, and export data |
-| **Logging** | Custom JsonFormatter (already in code) | No install needed — it is pure Python |
+| **Logging** | Custom JsonFormatter (already in code) | No install needed, it is pure Python |
 
 ---
 
-## Part 1 — Install Python 3.11
+## Part 1: Install Python
 
 Python is the language every script in this module is written in.
 
-### Step 1.1 — Download the installer
+### Step 1.1: Download the installer
 
 Go to: **https://www.python.org/downloads/**
 
-Click **"Download Python 3.11.x"** (the latest 3.11 release shown).
+Click the button for the latest **Python 3.12** release.
 
 > [!IMPORTANT]
-> Do **not** install Python 3.12 or 3.13 — some dependencies in this module have not caught up yet. Stick to **3.11**.
+> Anything from **3.11** upwards works. The labs are developed and tested on **3.12**, so that is the safest choice. Avoid the very newest release the day it comes out, since libraries take a few weeks to catch up.
 
-### Step 1.2 — Run the installer
+### Step 1.2: Run the installer
 
 1. Open the downloaded `.exe` file.
 2. On the first screen, **tick the checkbox** that says:  
-   ✅ `Add Python 3.11 to PATH`
+   ✅ `Add Python to PATH`
 3. Click **"Install Now"**.
 4. Wait for it to finish, then click **"Close"**.
 
-### Step 1.3 — Verify the install
+### Step 1.3: Verify the install
 
 Open **Command Prompt** (press `Win + R`, type `cmd`, press Enter) and run:
 
@@ -53,7 +53,7 @@ python --version
 
 Expected output:
 ```
-Python 3.11.x
+Python 3.12.x
 ```
 
 Also verify pip (Python's package installer) is present:
@@ -64,7 +64,7 @@ pip --version
 
 Expected output (version number may differ):
 ```
-pip 24.x.x from C:\Users\...\Python311\Lib\site-packages\pip (python 3.11)
+pip 24.x.x from C:\Users\...\Python312\Lib\site-packages\pip (python 3.12)
 ```
 
 > [!TIP]
@@ -72,22 +72,22 @@ pip 24.x.x from C:\Users\...\Python311\Lib\site-packages\pip (python 3.11)
 
 ---
 
-## Part 2 — Install Git
+## Part 2: Install Git
 
 Git lets you download (clone) this repository and track changes.
 
-### Step 2.1 — Download Git for Windows
+### Step 2.1: Download Git for Windows
 
 Go to: **https://git-scm.com/download/win**
 
 The download starts automatically. Run the installer.
 
-### Step 2.2 — Run the installer
+### Step 2.2: Run the installer
 
 Accept all defaults by clicking **"Next"** through every screen.  
 The important settings are already correct by default.
 
-### Step 2.3 — Verify
+### Step 2.3: Verify
 
 Open a **new** Command Prompt window and run:
 
@@ -102,38 +102,38 @@ git version 2.x.x.windows.x
 
 ---
 
-## Part 3 — Install VS Code
+## Part 3: Install VS Code
 
 VS Code is your code editor. It is free, lightweight, and has excellent Python support.
 
-### Step 3.1 — Download VS Code
+### Step 3.1: Download VS Code
 
 Go to: **https://code.visualstudio.com/**
 
 Click **"Download for Windows"**. Run the installer, accept defaults.
 
-### Step 3.2 — Install the Python extension
+### Step 3.2: Install the Python extension
 
 1. Open VS Code.
 2. Press `Ctrl + Shift + X` to open the Extensions panel.
 3. Search for **"Python"**.
 4. Install the extension published by **Microsoft** (it is the first result).
-5. Also install **"Pylance"** — same search, same publisher.
+5. Also install **"Pylance"**, same search, same publisher.
 
 ---
 
-## Part 4 — Install Docker Desktop
+## Part 4: Install Docker Desktop
 
 Docker Desktop runs PostgreSQL inside a container.  
-This means you **do not** need to install PostgreSQL manually — Docker handles it.
+This means you **do not** need to install PostgreSQL manually. Docker handles it.
 
-### Step 4.1 — Download Docker Desktop
+### Step 4.1: Download Docker Desktop
 
 Go to: **https://www.docker.com/products/docker-desktop/**
 
 Click **"Download for Windows"**. Run the installer.
 
-### Step 4.2 — Enable WSL 2 when prompted
+### Step 4.2: Enable WSL 2 when prompted
 
 During installation, Docker will ask you to enable **WSL 2** (Windows Subsystem for Linux).  
 Click **"OK"** or **"Install"** whenever prompted. Your computer may restart.
@@ -141,15 +141,15 @@ Click **"OK"** or **"Install"** whenever prompted. Your computer may restart.
 > [!NOTE]
 > WSL 2 is a lightweight Linux environment built into Windows. Docker needs it to run containers efficiently. You do not need to use the Linux terminal yourself.
 
-### Step 4.3 — Start Docker Desktop
+### Step 4.3: Start Docker Desktop
 
 After installation, open **Docker Desktop** from the Start menu.  
 Wait until you see a green status indicator that says **"Docker is running"** (bottom left corner).
 
 > [!IMPORTANT]
-> Docker Desktop must be **running** every time you work on this module. It is not a background service by default — you need to open it.
+> Docker Desktop must be **running** every time you work on this module. It is not a background service by default, so you need to open it.
 
-### Step 4.4 — Verify Docker
+### Step 4.4: Verify Docker
 
 Open Command Prompt and run:
 
@@ -175,14 +175,14 @@ Docker Compose version v2.x.x
 
 ---
 
-## Part 5 — Clone the Repository
+## Part 5: Clone the Repository
 
-### Step 5.1 — Open a terminal in VS Code
+### Step 5.1: Open a terminal in VS Code
 
 1. Open VS Code.
 2. Press `` Ctrl + ` `` to open the integrated terminal.
 
-### Step 5.2 — Navigate to where you want the project
+### Step 5.2: Navigate to where you want the project
 
 ```cmd
 cd C:\Users\YourName\Desktop
@@ -190,7 +190,7 @@ cd C:\Users\YourName\Desktop
 
 (Replace `YourName` with your actual Windows username.)
 
-### Step 5.3 — Clone the repo
+### Step 5.3: Clone the repo
 
 ```cmd
 git clone <your-repo-url> Data_Engineering_For_AI
@@ -202,12 +202,12 @@ cd Data_Engineering_For_AI
 
 ---
 
-## Part 6 — Create a Python Virtual Environment
+## Part 6: Create a Python Virtual Environment
 
 A virtual environment keeps this project's dependencies isolated from the rest of your system.  
 **Always create and activate the virtual environment before doing anything else.**
 
-### Step 6.1 — Create the environment
+### Step 6.1: Create the environment
 
 Inside VS Code's terminal, from the project root folder:
 
@@ -217,7 +217,7 @@ python -m venv .venv
 
 This creates a `.venv` folder inside the project. It contains a private Python installation.
 
-### Step 6.2 — Activate the environment
+### Step 6.2: Activate the environment
 
 ```cmd
 .venv\bin\activate
@@ -232,7 +232,7 @@ Your terminal prompt will change to show `(.venv)` at the start:
 > [!IMPORTANT]
 > You must run this activation command **every time** you open a new terminal window. The virtual environment is not active automatically.
 
-### Step 6.3 — Tell VS Code to use this environment
+### Step 6.3: Tell VS Code to use this environment
 
 1. Press `Ctrl + Shift + P`.
 2. Type **"Python: Select Interpreter"** and press Enter.
@@ -240,7 +240,7 @@ Your terminal prompt will change to show `(.venv)` at the start:
 
 ---
 
-## Part 7 — Install Python Dependencies
+## Part 7: Install Python Dependencies
 
 With the virtual environment active, install all required packages:
 
@@ -254,10 +254,12 @@ This installs:
 |---|---|
 | `pandas` | Loads and transforms tabular data (CSV, DataFrames) |
 | `pyarrow` | Reads and writes Parquet files; fast columnar data engine |
-| `sqlalchemy` | Python ORM — writes SQL queries and manages connections |
+| `sqlalchemy` | Talks to the database from Python, and manages the connections |
 | `psycopg[binary]` | PostgreSQL database driver (SQLAlchemy uses this to connect) |
 | `python-dotenv` | Reads your `.env` file and loads credentials as environment variables |
-| `requests` | Makes HTTP requests — used to download CSVs and call the ArXiv API |
+| `requests` | Makes HTTP requests, used to download CSVs and call the ArXiv API |
+| `prefect` | Runs the Day 4 workflow, handles the ordering and the retries |
+| `pytest` | Runs the test suite in `tests/` |
 
 ### Verify the install
 
@@ -265,22 +267,24 @@ This installs:
 pip list
 ```
 
-You should see all six packages in the list with their versions.
+You should see all of the packages above in the list, with their versions.
+
+The versions in `requirements.txt` are pinned to exact numbers on purpose, so everyone in the class is running the same thing. If an install goes wrong, `requirements.lock.txt` pins everything else as well and is the one to fall back on.
 
 ---
 
-## Part 8 — Configure the Environment File
+## Part 8: Configure the Environment File
 
 Your credentials and connection settings live in a `.env` file.  
 The pipeline scripts read from this file automatically using `python-dotenv`.
 
-### Step 8.1 — Copy the example file
+### Step 8.1: Copy the example file
 
 ```cmd
 copy .env.example .env
 ```
 
-### Step 8.2 — Open and edit `.env`
+### Step 8.2: Open and edit `.env`
 
 Open `.env` in VS Code. Fill in the values:
 
@@ -290,7 +294,7 @@ HF_CSV_URL=https://huggingface.co/datasets/Censius-AI/ECommerce-Women-Clothing-R
 
 # ── PostgreSQL connection ───────────────────────────────────────────────────
 PGHOST=localhost
-PGPORT=5432
+PGPORT=5434
 PGDATABASE=de_ai
 PGUSER=de_user
 PGPASSWORD=change_me           # ← change this to any password you like
@@ -347,15 +351,15 @@ DAY5_MAX_PAPERS=0
 
 ---
 
-## Part 9 — Start PostgreSQL with Docker Compose
+## Part 9: Start PostgreSQL with Docker Compose
 
 This starts a PostgreSQL 16 database running inside a Docker container.
 
-### Step 9.1 — Make sure Docker Desktop is open and running
+### Step 9.1: Make sure Docker Desktop is open and running
 
 Look for the green **"Docker is running"** label in Docker Desktop before proceeding.
 
-### Step 9.2 — Start the database
+### Step 9.2: Start the database
 
 From the project root in your terminal (with `.venv` active):
 
@@ -363,10 +367,10 @@ From the project root in your terminal (with `.venv` active):
 docker compose up -d
 ```
 
-- `-d` means "detached" — it runs in the background.
+- `-d` means "detached", so it runs in the background instead of taking over your terminal.
 - Docker downloads the PostgreSQL 16 image on first run (this takes ~1 minute).
 
-### Step 9.3 — Check that it is healthy
+### Step 9.3: Check that it is healthy
 
 ```cmd
 docker compose ps
@@ -384,7 +388,7 @@ The **STATUS** must say `Up (healthy)` before you run any pipeline scripts.
 > [!TIP]
 > If the status shows `Up (health: starting)`, wait 15 seconds and run `docker compose ps` again.
 
-### Step 9.4 — Stop the database when you are done
+### Step 9.4: Stop the database when you are done
 
 ```cmd
 docker compose down
@@ -394,7 +398,7 @@ Your data is preserved in a Docker volume (`pgdata`) and will be there next time
 
 ---
 
-## Part 10 — Verify the Full Stack
+## Part 10: Verify the Full Stack
 
 Run this quick check to confirm Python → dotenv → SQLAlchemy → psycopg → PostgreSQL all connect end-to-end:
 
@@ -425,29 +429,31 @@ Connected: PostgreSQL 16.x on x86_64-pc-linux-musl, ...
 
 ---
 
-## Part 11 — Run the Labs
+## Part 11: Run the Labs
 
 Once setup is complete, run each day's script from the project root:
 
 ```cmd
-# Day 1 — Download HuggingFace CSV and load into PostgreSQL
+# Day 1: Download HuggingFace CSV and load into PostgreSQL
 python day1/day1_hf_csv_to_postgres.py
 
-# Day 2 — Pull ArXiv papers via API and load into PostgreSQL
+# Day 2: Pull ArXiv papers via API and load into PostgreSQL
 python day2/day2_arxiv_api_to_postgres.py
 
-# Day 3 — Export clean data to CSV and Parquet, run benchmark
+# Day 3: Export clean data to CSV and Parquet, run benchmark
 python day3/day3_postgres_to_csv_parquet_benchmark.py
 
-# Day 4 — Orchestrate Day 2 and Day 3 with retries
+# Day 4: Orchestrate Day 2 and Day 3 with retries
 python day4/day4_orchestrated_workflow.py
 
-# Day 5 — Build instruction-tuning JSONL payloads
+# Day 5: Build instruction-tuning JSONL payloads
 python day5/day5_build_instruction_payload.py
 ```
 
 > [!NOTE]
-> Day 2 fetches up to 10,000 papers and respects ArXiv's rate limit (5-second sleep between pages). It may take 15–30 minutes to complete fully. This is normal — the pipeline is being polite to the API.
+> Day 2 fetches up to 10,000 papers and waits 5 seconds between pages, because ArXiv is a free public service and hammering it is rude. A full run takes 12 to 15 minutes. That is normal, and the waiting is deliberate.
+>
+> If you only want to see it work, run `ARXIV_MAX_PAPERS=300 python day2/lesson.py` for a much shorter run.
 
 ---
 
@@ -459,18 +465,18 @@ python day5/day5_build_instruction_payload.py
 | `pip` not recognized | Same as above | Same fix |
 | `(.venv)` not showing | Virtual env not activated | Run `.venv\Scripts\activate` again |
 | `docker: command not found` | Docker Desktop not started | Open Docker Desktop and wait for green status |
-| `connection refused` on port 5432 | PostgreSQL container not running | Run `docker compose up -d` |
+| `connection refused` on the database port | PostgreSQL container not running | Run `docker compose up -d` |
 | `(healthy)` not showing | Container still starting | Wait 15s, re-run `docker compose ps` |
 | `Missing required environment variables` | `.env` file missing or incomplete | Re-do Part 8 |
 | `ModuleNotFoundError` | Dependencies not installed | Re-run `pip install -r requirements.txt` with `.venv` active |
-| `psycopg` import error | Wrong psycopg version | Run `pip install "psycopg[binary]>=3.2.0"` |
+| `psycopg` import error | Wrong psycopg version | Re-run `pip install -r requirements.txt` with `.venv` active |
 
 ---
 
 ## Quick Reference Cheatsheet
 
 ```cmd
-# Every session — do these first:
+# Every session, do these first:
 docker compose up -d          # start the database
 .venv\Scripts\activate        # activate Python environment
 
@@ -493,7 +499,7 @@ pip list
 
 Before your first lab session, tick each item:
 
-- [ ] `python --version` returns `3.11.x`
+- [ ] `python --version` returns `3.11.x` or higher
 - [ ] `pip --version` returns a version number
 - [ ] `git --version` returns a version number
 - [ ] Docker Desktop shows green **"Docker is running"**

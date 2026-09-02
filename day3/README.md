@@ -1,72 +1,108 @@
-# Day 3 Lab: PostgreSQL to CSV and Parquet Benchmark
+# Day 3 Lab: PostgreSQL to CSV and Parquet
 
-## Goal
+## What You Are Building
 
-Turn the clean Day 2 data in PostgreSQL into two export formats, then prove the difference with a simple benchmark.
+The papers are in the database. Now you take them out, write them to disk in two different file formats, and measure which one is better and in what way.
 
-This lab is designed to make the storage tradeoff obvious:
+This sounds like a small day, and the code is small. The point is the result, which is more interesting than most people expect and does not say what everyone assumes it will say.
 
-- CSV is easy to inspect and share.
-- Parquet is columnar, compact, and faster to read for analytical workloads.
-- The benchmark makes the difference measurable in milliseconds and megabytes.
+## Words You Will Need
 
-## What This Day Covers
+**ETL and ELT.** Two orders for the same three jobs. ETL is Extract, Transform, Load: pull the data out, fix it up in your own code, then put it somewhere. ELT swaps the last two: pull it out, load it, and let the database do the transforming. Day 1 and Day 2 were closer to ETL, because pandas and Python did the cleaning. Day 3 is ELT, because the transforming happens in SQL inside PostgreSQL.
 
-- Querying the clean Day 2 table from PostgreSQL.
-- Exporting the same dataset to CSV and Parquet.
-- Using PyArrow to write Parquet with `snappy` compression.
-- Reading CSV and Parquet with both pandas and PyArrow.
-- Measuring file size and read-time differences.
-- Writing a JSON benchmark report for later review.
+**View.** A saved query. It looks like a table when you select from it, but it holds no data of its own, it just runs its query when you ask. It is a way to give a complicated query a name.
 
-## Files
+**Materialized view.** A view that does keep its results, like a snapshot. Reading from it is fast because the work is already done, but the snapshot goes stale until something refreshes it. You use one when the query is expensive and the data does not change every minute.
 
-- `lesson.py`: small teaching-first benchmark entrypoint.
-- `pipeline/`: focused modules for config, source loading, exports, benchmarks, reports, and logging.
-- `day3_postgres_to_csv_parquet_benchmark.py`: compatibility entrypoint for the original run command.
-- `DAY3_CODE_WALKTHROUGH.md`: beginner-friendly explanation of the script.
-- `day3_agent_query_views.sql`: SQL views and materialized views for agent-style querying.
-- `output/`: deterministic CSV, Parquet, and JSON benchmark artifacts.
+**CSV.** A text file where each line is a row and commas separate the values. Every program on earth can read it. It has no types, no compression, and no structure beyond lines and commas.
 
-## Required Setup
+**Parquet.** A file format built for analytics. Instead of storing row by row, it stores column by column, compresses each column, and keeps an index at the end saying where each column starts.
 
-1. Copy `.env.example` to `.env` if you have not already.
-2. Confirm PostgreSQL is running with the Day 2 data loaded.
-3. Install the Python dependencies.
+**Column projection.** Asking for only some of the columns instead of all of them. Nearly every real query does this, and it turns out to be the whole story of Day 3.
 
-## Install Dependencies
+## Before You Start
+
+You need Day 2 to have run, because Day 3 reads the table Day 2 filled. If `training_data.clean_papers` is empty, go back and run Day 2 first.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+docker compose up -d
 ```
 
-## Run the Day 3 Pipeline
-
-```bash
-python day3/day3_postgres_to_csv_parquet_benchmark.py
-```
-
-For teaching, open the smaller entrypoint first:
+## Run It
 
 ```bash
 python day3/lesson.py
 ```
 
-## Default Source and Outputs
+The same pipeline also runs from here:
 
-By default, the script reads from `training_data.clean_papers` and writes these files:
+```bash
+python day3/day3_postgres_to_csv_parquet_benchmark.py
+```
+
+## What Happens, In Order
+
+1. Read the clean papers out of PostgreSQL.
+2. Create the SQL views inside the database. This is the Transform.
+3. Write the same rows to a CSV file and a Parquet file.
+4. Read both files back, over and over, with a stopwatch running.
+5. Print a table and save a JSON report.
+
+Step 2 finishes before step 3 starts. The Transform genuinely happens before the Load, which is the order the ELT name describes.
+
+## The Result, And Why It Surprises People
+
+Here is the shape of what you get:
+
+```text
+read_mode  reader  columns  csv_avg_ms  parquet_avg_ms  speedup_factor
+     full  pandas       19     748.363         144.845           5.167
+     full pyarrow       19      51.671         106.811           0.484
+projected  pandas        3     379.469           6.706          56.586
+projected pyarrow        3      32.951           3.622           9.097
+```
+
+Your exact numbers will differ, since they depend on your machine and how many
+papers you loaded. The shape of the result is what matters, and that stays the
+same.
+
+`speedup_factor` above 1 means Parquet won. Below 1 means CSV won.
+
+Look at the second row. Reading every column with PyArrow, the CSV is **faster** than the Parquet file. That is not a mistake in the benchmark, and you should not skip past it.
+
+The reason is that PyArrow has a very good CSV reader that uses several CPU cores at once. When you ask for the whole file, that reader is hard to beat, and Parquet has to spend time undoing its own compression. Being smaller on disk does not automatically make a file faster to read.
+
+Now look at the bottom two rows, where we ask for three columns out of nineteen. Parquet wins for both readers, and it wins enormously. Here is why:
+
+- A CSV is one long piece of text with no map. To find the third column of every row, the reader still has to walk through and parse every single character of the file, including the huge summary and payload columns you did not ask for.
+- Parquet keeps each column in its own block, and keeps a small index at the end saying where each block starts. Ask for three columns and it reads three blocks. The rest of the file is never touched.
+
+So the honest lesson is not "Parquet is faster". It is:
+
+> Parquet is always smaller, and it is dramatically faster when you read part of your data. Real analytics queries almost always read part of the data, which is why Parquet wins in practice.
+
+That is a more useful thing to know than the version where the numbers all point the same way.
+
+## Where The Files Go
+
+Reading from `training_data.clean_papers` by default and writing:
 
 - `day3/output/day3_clean_papers_benchmark.csv`
 - `day3/output/day3_clean_papers_benchmark.parquet`
 - `day3/output/day3_clean_papers_benchmark.json`
 
-The files are overwritten deterministically on each run.
+Each run overwrites them, and the same input always produces the same output.
 
-## Environment Variables
+## What The Files Are
 
-Recommended Day 3 settings:
+- `lesson.py`: the short version. Read this first.
+- `pipeline/`: config, source loading, exports, SQL provisioning, benchmarks, reports, logging.
+- `day3_agent_query_views.sql`: the SQL views, which are the Transform step.
+- `day3_postgres_to_csv_parquet_benchmark.py`: a second way to run the same pipeline.
+- `DAY3_CODE_WALKTHROUGH.md`: the slower explanation.
+- `output/`: the CSV, Parquet and JSON that come out.
+
+## Settings
 
 ```env
 DAY3_SOURCE_TABLE=training_data.clean_papers
@@ -76,38 +112,14 @@ DAY3_EXPORT_BASENAME=day3_clean_papers_benchmark
 DAY3_BENCHMARK_RUNS=10
 ```
 
-## What To Look At
+`DAY3_BENCHMARK_RUNS` is how many times each read is repeated. Timing something once tells you very little, because your machine might have been busy for that one moment. Ten runs and taking the average is the cheapest way to get a number you can trust.
 
-- The console summary table.
-- The JSON benchmark report in `day3/output/`.
-- The size gap between the CSV and Parquet files.
-- The read-time difference between pandas and PyArrow on both formats.
+## What To Look At Afterwards
 
-## Agent Query Views
+- The summary table, especially the gap between the `full` and `projected` rows.
+- The JSON report in `day3/output/`, which has the full timings.
+- The two files on disk. Parquet is a little under half the size.
 
-If you want an AI agent to answer user questions with fast SQL, create the Day 3 views:
+## About The SQL Views
 
-```bash
-eval "$(grep -E '^(PGHOST|PGPORT|PGDATABASE|PGUSER|PGPASSWORD)=' .env | sed 's/^/export /')"
-psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f day3/day3_agent_query_views.sql
-```
-
-After each new ingestion batch, refresh the materialized views:
-
-```sql
-REFRESH MATERIALIZED VIEW training_data.mv_agent_keyword_frequency;
-REFRESH MATERIALIZED VIEW training_data.mv_agent_category_cooccurrence;
-```
-
-Recommended agent-first tables/views:
-
-- `training_data.v_agent_papers`
-- `training_data.v_agent_category_counts`
-- `training_data.v_agent_monthly_category_counts`
-- `training_data.v_agent_author_frequency`
-- `training_data.v_agent_author_category_frequency`
-- `training_data.v_agent_metadata_quality`
-- `training_data.v_agent_pipeline_health`
-- `training_data.v_agent_recent_papers`
-- `training_data.mv_agent_keyword_frequency`
-- `training_data.mv_agent_category_cooccurrence`
+The views are created by this lab as its Transform step, and Day 4 creates them again when it runs its full workflow. Running either is enough. Creating them twice does no harm, because the SQL drops and recreates them each time.
