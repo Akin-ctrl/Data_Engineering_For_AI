@@ -8,11 +8,7 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-
-SCHEMA_NAME = "de_ai"
-RAW_TABLE = "raw_reviews"
-CLEAN_TABLE = "clean_reviews"
-REJECT_TABLE = "rejected_reviews"
+from day1.pipeline.constants import CLEAN_TABLE, RAW_TABLE, REJECT_TABLE, SCHEMA_NAME
 
 
 def ensure_schema_and_tables(engine: Engine) -> None:
