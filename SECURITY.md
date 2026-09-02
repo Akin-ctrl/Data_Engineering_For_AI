@@ -6,7 +6,7 @@ This is a learning module, not a production system. However, we take security se
 
 Do not open a public issue for security vulnerabilities. Instead:
 
-1. Email the maintainer directly.
+1. Email akin4gbade@gmail.com
 2. Include a clear description of the vulnerability.
 3. Include steps to reproduce it, if possible.
 4. Allow time for a response and fix before disclosing publicly.
