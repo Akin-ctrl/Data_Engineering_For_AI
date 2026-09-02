@@ -8,10 +8,12 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class ReadBenchmarkResult:
-    """Timing results for one reader and one file format."""
+    """Timing results for one reader, one file format, and one read mode."""
 
     reader: str
     file_format: str
+    read_mode: str
+    columns_read: int
     rows_read: int
     run_count: int
     average_ms: float
