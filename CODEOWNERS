@@ -1,0 +1,17 @@
+# CODEOWNERS file for Data Engineering for AI
+
+# The maintainer reviews all changes by default
+* @Akin-ctrl
+
+# Day-specific code (optional, but useful if you have collaborators)
+day1/ @Akin-ctrl
+day2/ @Akin-ctrl
+day3/ @Akin-ctrl
+day4/ @Akin-ctrl
+day5/ @Akin-ctrl
+
+# Tests should be reviewed
+tests/ @Akin-ctrl
+
+# Documentation changes
+*.md @Akin-ctrl
