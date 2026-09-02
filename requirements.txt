@@ -1,7 +1,14 @@
-pandas>=2.2.0
-prefect>=2.20.0
-pyarrow>=16.0.0
-sqlalchemy>=2.0.0
-psycopg[binary]>=3.2.0
-python-dotenv>=1.0.0
-requests>=2.31.0
+# Pinned to exact versions so every learner gets the same behaviour.
+# These are the versions the labs were tested against.
+# If you need to reinstall from scratch and hit trouble, use requirements.lock.txt,
+# which also pins every indirect dependency.
+pandas==3.0.3
+prefect==3.7.4
+pyarrow==24.0.0
+sqlalchemy==2.0.50
+psycopg[binary]==3.3.4
+python-dotenv==1.2.2
+requests==2.34.2
+
+# Used by the tests in tests/
+pytest==9.1.1
